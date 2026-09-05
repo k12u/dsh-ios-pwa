@@ -47,6 +47,23 @@ test("HTTP pairing uses secure HttpOnly cookie; CSRF is enforced on every mutati
     const created = await h.request("/api/sessions", { cookie, body: {} }); assert.equal(created.statusCode, 200); assert.ok(JSON.parse(created.text).sessionId);
   } finally { await h.app.close(); }
 });
+test("a paired device can issue one-time links for additional devices", async () => {
+  const h = harness();
+  try {
+    assert.equal((await h.request("/api/pairing", { body: {} })).statusCode, 401);
+    const cookie = (await h.pair()).headers["set-cookie"];
+    const issued = await h.request("/api/pairing", { cookie, body: {} }); assert.equal(issued.statusCode, 200);
+    const { url, expiresAt } = JSON.parse(issued.text);
+    assert.ok(url.startsWith("https://mobile.example/pair?t="));
+    assert.ok(expiresAt > Date.now());
+    const token = new URL(url).searchParams.get("t");
+    const added = await h.request("/api/pair", { body: { token, name: "Second device" } }); assert.equal(added.statusCode, 200);
+    const second = added.headers["set-cookie"];
+    assert.notEqual(second, cookie);
+    assert.equal((await h.request("/api/snapshot", { cookie: second })).statusCode, 200);
+    assert.equal((await h.request("/api/pair", { body: { token, name: "Reuse" } })).statusCode, 401);
+  } finally { await h.app.close(); }
+});
 test("prompt retries are idempotent; changed body cannot reuse an ID", async () => {
   const h = harness();
   try {

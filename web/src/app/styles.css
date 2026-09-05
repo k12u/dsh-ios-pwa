@@ -27,3 +27,9 @@
   .page-intro{margin:0 0 28px}
   .page-intro h1{font-size:26px}
 }
+
+.pair-issue{display:flex;flex-direction:column;gap:10px;margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.pair-qr{align-self:center}
+.pair-qr svg{display:block;width:200px;height:auto}
+.pair-url{font-size:12px;overflow-wrap:anywhere}
+.pair-actions{display:flex;gap:8px;flex-wrap:wrap}

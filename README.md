@@ -49,7 +49,7 @@ If `pushSubject` is omitted, the Push capability is not advertised. VAPID keys, 
 
 The Gateway listens only on `127.0.0.1:8787`. Point Tailscale Serve or your HTTPS reverse proxy at this port. Only the Gateway port is forwarded externally. Do not forward the Harness Web UI port or the raw Remote API. The Gateway serves `/`, `/api/*`, `/ws/mobile`, and `/push/*` together.
 
-Opening `http://localhost:<Harness port>/mobile-pwa` on the Harness host lets you issue a pairing QR code / link that is valid for 5 minutes and one use only. Scan it with your phone's standard camera to connect. On first startup, the link also appears in the console. Authenticated devices can be revoked from the PWA's Settings.
+Opening `http://localhost:<Harness port>/mobile-pwa` on the Harness host lets you issue a pairing QR code / link that is valid for 5 minutes and one use only. Scan it with your phone's standard camera to connect. On first startup, the link also appears in the console. Authenticated devices can be revoked from the PWA's Settings, and an already paired device can issue a fresh one-time link from Settings → Add device, so an extra phone can be paired without host access.
 
 This local admin page does not currently add a link to the sidebar; open the URL above directly. The browser never receives a long-lived token; instead an `HttpOnly; Secure; SameSite=Strict; Path=/` Cookie is set.
 

@@ -4,6 +4,7 @@ import { useStore, projectConversation, store } from "../state/store";
 import { projectInbox } from "../projections/inbox";
 import { api, loadHistory } from "../api/gateway-client";
 import { connection } from "../sync/connection";
+import qrcode from "../pairing/qrcode.js";
 import { ApprovalCard, QuestionCard } from "../components/Interactions";
 import { Markdown } from "../components/Markdown";
 import "./styles.css";
@@ -110,7 +111,9 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
   </div>;
 }
 function Settings({ online }: { online: boolean }) {
-  const state = useStore(); const [devices, setDevices] = useState<any[]>([]), [error, setError] = useState(""), [notice, setNotice] = useState("");
+  const state = useStore(); const [devices, setDevices] = useState<any[]>([]), [error, setError] = useState(""), [notice, setNotice] = useState(""), [pair, setPair] = useState<{ url: string; expiresAt: number } | undefined>(undefined), [pairing, setPairing] = useState(false);
+  let qrSvg = "";
+  if (pair) { const code = qrcode(0, "M"); code.addData(pair.url); code.make(); qrSvg = code.createSvgTag(4, 16); }
   useEffect(() => { if (online) void api("/api/devices").then(d => setDevices(d.devices)).catch(e => setError(e.message)); }, [online]);
   async function push() {
     try {
@@ -123,5 +126,15 @@ function Settings({ online }: { online: boolean }) {
       await api("/push/subscription", subscription.toJSON()); setNotice("Notifications enabled"); setError("");
     } catch (e) { setError((e as Error).message); }
   }
-  return <><div className="page-intro"><div className="eyebrow">MAKE YOURSELF AT HOME</div><h1>Settings.</h1></div><section className="settings-card"><h2>Install DSH Mobile</h2><p>On iPhone, use Safari's Share menu → Add to Home Screen. On Android, choose Install app from the browser menu.</p></section>{state.hello?.capabilities.includes("push") && <section className="settings-card"><h2>Stay in the loop</h2><p>Get notified when your agent needs a decision or finishes a task.</p><button disabled={!online} onClick={() => void push()}>Enable notifications</button></section>}<section className="settings-card"><h2>Paired devices</h2>{devices.map(d => <div className="device-row" key={d.id}><span>{d.name}</span><button disabled={!online} onClick={() => { void api("/api/revoke", { id: d.id }).then(() => setDevices(devices.filter(x => x.id !== d.id))).catch(e => setError(e.message)); }}>Revoke</button></div>)}</section>{notice && <p role="status">{notice}</p>}{error && <p role="alert" className="error-text">{error}</p>}<p className="muted">DSH Mobile {GATEWAY_VERSION}</p></>;
+  async function addDevice() {
+    setPairing(true);
+    try { setPair(await api("/api/pairing", {})); setError(""); }
+    catch (e) { setError((e as Error).message); }
+    finally { setPairing(false); }
+  }
+  async function copy(value: string, what: string) {
+    try { await navigator.clipboard.writeText(value); setNotice(what + " copied"); setError(""); }
+    catch { setError("Couldn't copy. Long-press the text to copy it manually."); }
+  }
+  return <><div className="page-intro"><div className="eyebrow">MAKE YOURSELF AT HOME</div><h1>Settings.</h1></div><section className="settings-card"><h2>Install DSH Mobile</h2><p>On iPhone, use Safari's Share menu → Add to Home Screen. On Android, choose Install app from the browser menu.</p></section>{state.hello?.capabilities.includes("push") && <section className="settings-card"><h2>Stay in the loop</h2><p>Get notified when your agent needs a decision or finishes a task.</p><button disabled={!online} onClick={() => void push()}>Enable notifications</button></section>}<section className="settings-card"><h2>Paired devices</h2><p>To pair another phone or tablet, create a one-time link here and open it on that device. Links expire after 5 minutes.</p><button disabled={!online || pairing} onClick={() => void addDevice()}>{pairing ? "Creating link…" : "Add device"}</button>{pair && <div className="pair-issue"><div className="pair-qr" role="img" aria-label="Pairing QR code" dangerouslySetInnerHTML={{ __html: qrSvg }}/><span className="pair-url">{pair.url}</span><small className="muted">Expires at {new Date(pair.expiresAt).toLocaleTimeString()}. Scan the code with the other device's camera, open the link there, or paste its code into the pairing screen.</small><div className="pair-actions"><button onClick={() => void copy(pair.url, "Link")}>Copy link</button><button onClick={() => void copy(new URL(pair.url).searchParams.get("t") ?? "", "Code")}>Copy code</button></div></div>}{devices.map(d => <div className="device-row" key={d.id}><span>{d.name}</span><button disabled={!online} onClick={() => { void api("/api/revoke", { id: d.id }).then(() => setDevices(devices.filter(x => x.id !== d.id))).catch(e => setError(e.message)); }}>Revoke</button></div>)}</section>{notice && <p role="status">{notice}</p>}{error && <p role="alert" className="error-text">{error}</p>}<p className="muted">DSH Mobile {GATEWAY_VERSION}</p></>;
 }

@@ -14,5 +14,6 @@ await build({ entryPoints: { plugin: "gateway/src/adapters/plugin.ts", dev: "gat
 await cp("vendor/mobile-gateway/LICENSE", "gateway/dist/UPSTREAM-LICENSE");
 await cp("LICENSE", "gateway/LICENSE");
 await cp("gateway/src/pairing/LICENSE", "gateway/dist/QRCODE-LICENSE");
+await cp("gateway/src/pairing/LICENSE", "gateway/public/QRCODE-LICENSE.txt");
 await cp("vendor/marked/LICENSE.md", "gateway/public/MARKED-LICENSE.txt");
 console.log("Built gateway + PWA (" + version + ")");

@@ -49,7 +49,7 @@ dsh web
 
 Gateway は `127.0.0.1:8787` のみで待ち受けます。Tailscale Serve または HTTPS reverse proxy の転送先をこのポートに設定します。外部へ転送するのは Gateway のポートのみです。Harness Web UI のポートや raw Remote API は転送しません。Gateway が `/`、`/api/*`、`/ws/mobile`、`/push/*` をまとめて配信します。
 
-Harness ホストの `http://localhost:<Harness のポート>/mobile-pwa` を開くと、5分間・一度限り有効な pairing QR / リンクを発行できます。スマートフォンの標準カメラで読み取って接続してください。初回起動時はコンソールにもリンクが出ます。認証済みデバイスの失効は PWA の Settings で実行できます。
+Harness ホストの `http://localhost:<Harness のポート>/mobile-pwa` を開くと、5分間・一度限り有効な pairing QR / リンクを発行できます。スマートフォンの標準カメラで読み取って接続してください。初回起動時はコンソールにもリンクが出ます。認証済みデバイスの失効は PWA の Settings で実行できます。既にペアリング済みの端末は Settings → Add device から新しい一度限りのリンクを発行できるため、追加端末のペアリングにホストへの SSH は不要です。
 
 このローカル管理ページは現在サイドバーへのリンク追加を行いません。上記 URL を直接開いてください。ブラウザには長期 token を返さず、`HttpOnly; Secure; SameSite=Strict; Path=/` Cookie を設定します。
 
