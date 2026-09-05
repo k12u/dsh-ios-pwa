@@ -1,0 +1,15 @@
+{
+  "id": "e1",
+  "sessionId": "s1",
+  "seq": 1,
+  "time": 1000,
+  "revision": 1,
+  "kind": "attention.approval",
+  "approval": {
+    "id": "a1",
+    "sessionId": "s1",
+    "toolName": "shell",
+    "reason": "Review",
+    "state": "pending"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id":"/","name":"DSH Mobile","short_name":"DSH","description":"Your agent, within reach.",
+  "display":"standalone","start_url":"/","scope":"/","background_color":"#f8f9fb","theme_color":"#f8f9fb",
+  "icons":[
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

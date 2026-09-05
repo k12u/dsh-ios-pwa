@@ -1,0 +1,32 @@
+name: Harness compatibility
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 3 * * 1"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, rc, alpha]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: corepack enable
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Resolve upstream channel
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: echo "HARNESS_VERSION=$(node scripts/resolve-harness-version.mjs "$CHANNEL")" >> "$GITHUB_ENV"
+      - name: Install official runtime in an isolated directory
+        run: npm install --prefix "$RUNNER_TEMP/dsh-runtime" "@deepseek-ai/dsh@$HARNESS_VERSION"
+      - name: Boot official runtime and installed plugin
+        run: DSH_BIN="$RUNNER_TEMP/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js" node scripts/harness-smoke.mjs

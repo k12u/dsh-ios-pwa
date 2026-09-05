@@ -1,0 +1,15 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { DemoAdapter } from "../gateway/src/adapters/demo";
+import { store } from "../web/src/state/store";
+Object.assign(globalThis, { location: { pathname: "/", search: "" } });
+const { App } = await import("../web/src/app/App");
+const adapter = new DemoAdapter();
+store.dispatch({ type: "hello", value: { kind: "hello", protocol: 1, minSupportedProtocol: 1, gatewayVersion: "0.1.0", capabilities: adapter.capabilities() } });
+store.dispatch({ type: "snapshot", value: { ...await adapter.snapshot(), kind: "snapshot", revision: 0 } });
+store.dispatch({ type: "connection", value: "online" });
+const css = (await readFile("web/src/app/styles.css", "utf8")).replace(/^@import[^;]+;/, "");
+await mkdir("test-results", { recursive: true });
+await writeFile("test-results/preview.html", '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DSH Mobile · static layout preview</title><style>' + css + '</style><body>' + renderToStaticMarkup(createElement(App)) + '</body></html>');
+adapter.dispose();

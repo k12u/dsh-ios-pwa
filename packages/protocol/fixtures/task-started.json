@@ -1,0 +1,14 @@
+{
+  "id": "e1",
+  "sessionId": "s1",
+  "seq": 1,
+  "time": 1000,
+  "revision": 1,
+  "kind": "task.updated",
+  "task": {
+    "id": "t1",
+    "sessionId": "s1",
+    "title": "Inspect",
+    "status": "running"
+  }
+}

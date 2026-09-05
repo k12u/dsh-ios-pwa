@@ -1,0 +1,18 @@
+import { build } from "esbuild";
+import { cp, mkdir, readFile, readdir, writeFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+const files = await readdir("web/dist/assets");
+const assets = ["/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png", ...files.map(f => "/assets/" + f)];
+const index = await readFile("web/dist/index.html");
+const version = createHash("sha256").update(index).digest("hex").slice(0, 12);
+const worker = (await readFile("web/src/service-worker/sw.js", "utf8")).replace("__BUILD_ID__", version).replace("__ASSETS__", JSON.stringify(assets));
+await writeFile("web/dist/sw.js", worker);
+await rm("gateway/public", { recursive: true, force: true });
+await mkdir("gateway/public", { recursive: true });
+await cp("web/dist", "gateway/public", { recursive: true });
+await build({ entryPoints: { plugin: "gateway/src/adapters/plugin.ts", dev: "gateway/src/dev.ts" }, bundle: true, platform: "node", target: "node22", format: "esm", outdir: "gateway/dist", external: ["ws", "zod"], sourcemap: true });
+await cp("vendor/mobile-gateway/LICENSE", "gateway/dist/UPSTREAM-LICENSE");
+await cp("LICENSE", "gateway/LICENSE");
+await cp("gateway/src/pairing/LICENSE", "gateway/dist/QRCODE-LICENSE");
+await cp("vendor/marked/LICENSE.md", "gateway/public/MARKED-LICENSE.txt");
+console.log("Built gateway + PWA (" + version + ")");

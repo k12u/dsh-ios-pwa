@@ -1,0 +1,7 @@
+# Set publicOrigin to the exact HTTPS origin before starting dsh web.
+- insert:
+    - id: mobile-pwa
+      name: dsh-plugin-mobile-pwa
+      config:
+        publicOrigin: http://localhost:8787
+        port: 8787

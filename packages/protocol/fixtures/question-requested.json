@@ -1,0 +1,20 @@
+{
+  "id": "e1",
+  "sessionId": "s1",
+  "seq": 1,
+  "time": 1000,
+  "revision": 1,
+  "kind": "attention.question",
+  "question": {
+    "id": "q1",
+    "sessionId": "s1",
+    "state": "pending",
+    "fields": [
+      {
+        "id": "f1",
+        "title": "Continue?",
+        "options": []
+      }
+    ]
+  }
+}

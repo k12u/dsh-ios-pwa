@@ -1,0 +1,10 @@
+{
+  "kind": "hello",
+  "protocol": 1,
+  "minSupportedProtocol": 1,
+  "gatewayVersion": "0.1.0",
+  "capabilities": [
+    "sessions",
+    "streaming"
+  ]
+}

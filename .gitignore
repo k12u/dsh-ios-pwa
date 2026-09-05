@@ -1,0 +1,7 @@
+node_modules/
+**/dist/
+gateway/public/
+.data/
+.env
+*.tgz
+test-results/

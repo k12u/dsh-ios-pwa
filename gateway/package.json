@@ -1,0 +1,24 @@
+{
+  "name": "dsh-plugin-mobile-pwa",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/plugin.js",
+  "files": [
+    "dist",
+    "public",
+    "cordis.patch.yml"
+  ],
+  "exports": {
+    ".": "./dist/plugin.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "ws": "8.21.3",
+    "zod": "4.5.4"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "hello",
+  "protocol": 2,
+  "minSupportedProtocol": 1,
+  "gatewayVersion": "future",
+  "capabilities": [
+    "sessions",
+    "streaming"
+  ],
+  "futureField": true
+}

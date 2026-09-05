@@ -1,0 +1,15 @@
+{
+  "upstream": "https://github.com/Clarklevis1995/dsh-plugin-mobile-gateway",
+  "version": "0.7.1",
+  "retrieved": "2026-09-05",
+  "files": {
+    "lib/index.mjs": "0f96ecee06a7bebdb3456b9cb5a7469969692741",
+    "lib/dsh-host-adapter.mjs": "575dea3a06c3cd2eb0f8cfb8fe5ca9d9ab23fc56",
+    "lib/devices.js": "a604f55a952c79a690b43b15343e1b799dacf1a4",
+    "test/host-adapter.test.mjs": "abb03acf2edce430aae0a39dbc38093e136a008d",
+    "test/gateway.test.mjs": "54da81827e52ed1546de4ac1b75b0330f7eaf275",
+    "test/auth.test.mjs": "538f2e236ca26db8b961ea20b0bfaf92cb604da6",
+    "test/lan.test.mjs": "b982b6cd8620bdfe516811bc6a20a59349a15dfe",
+    "LICENSE": "4ece061d0846a224cb8d6944d93938f2a2482954"
+  }
+}

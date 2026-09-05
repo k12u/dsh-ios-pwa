@@ -1,0 +1,11 @@
+{
+  "id": "e1",
+  "sessionId": "s1",
+  "seq": 1,
+  "time": 1000,
+  "revision": 1,
+  "kind": "attention.resolved",
+  "attentionId": "a1",
+  "target": "approval",
+  "state": "allowed-once"
+}

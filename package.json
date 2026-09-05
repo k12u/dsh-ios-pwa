@@ -1,0 +1,41 @@
+{
+  "name": "dsh-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "gateway",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "node --import tsx gateway/src/dev.ts",
+    "build": "tsc --noEmit && vite build --config web/vite.config.ts && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "test:upstream": "node vendor/mobile-gateway/test/host-adapter.test.mjs",
+    "start": "node gateway/dist/dev.js",
+    "test:network": "node --import tsx scripts/network-smoke.ts",
+    "test:harness": "node scripts/harness-smoke.mjs",
+    "preview:static": "node scripts/render-static.mjs"
+  },
+  "dependencies": {
+    "@speed-highlight/core": "https://registry.npmjs.org/@speed-highlight/core/-/core-1.2.24.tgz",
+    "react": "https://registry.npmjs.org/react/-/react-19.2.8.tgz",
+    "react-dom": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz",
+    "ws": "https://registry.npmjs.org/ws/-/ws-8.21.3.tgz",
+    "zod": "https://registry.npmjs.org/zod/-/zod-4.5.4.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "https://registry.npmjs.org/@types/node/-/node-24.13.3.tgz",
+    "@types/react": "https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz",
+    "@types/react-dom": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.5.tgz",
+    "tsx": "https://registry.npmjs.org/tsx/-/tsx-4.21.0.tgz",
+    "typescript": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz",
+    "vite": "https://registry.npmjs.org/vite/-/vite-8.0.13.tgz",
+    "esbuild": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.1.tgz"
+  }
+}
