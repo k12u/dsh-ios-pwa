@@ -15,7 +15,12 @@ export function normalizeEvent(sessionId: string, raw: Raw): MobileEvent[] {
   const messageId = sessionId + ":assistant:" + d.turn + ":" + d.step;
   let event: any;
   switch (raw.type) {
-    case "user/message": event = { kind: "message.completed", role: "user", messageId: sessionId + ":user:" + raw.seq, text: textOf(d.content), images: imagesOf(d.content) }; break;
+    case "user/message":
+      // Harness represents model-facing plugin context as user-role messages.
+      // Only real user input belongs in the mobile conversation. Older records
+      // without source metadata remain visible for backward compatibility.
+      if (d.source?.kind && d.source.kind !== "user") return [];
+      event = { kind: "message.completed", role: "user", messageId: sessionId + ":user:" + raw.seq, text: textOf(d.content), images: imagesOf(d.content) }; break;
     case "step/start": event = { kind: "message.started", role: "assistant", messageId }; break;
     case "assistant/chunk":
       if (d.chunk?.type !== "text-delta") return [];

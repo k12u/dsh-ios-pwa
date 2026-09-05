@@ -39,6 +39,16 @@ test("unknown event kinds and additive fields are forward compatible", () => {
   assert.equal(decodeHello({ kind: "hello", protocol: 2, minSupportedProtocol: 1, gatewayVersion: "next", capabilities: ["future-capability"] }).protocol, 2);
   assert.throws(() => decodeHello({ kind: "hello", protocol: 2, minSupportedProtocol: 2, gatewayVersion: "next", capabilities: [] }), /update/);
 });
+
+test("plugin-injected user-role context is not exposed as a user conversation message", () => {
+  const user = normalizeEvent("s1", { type: "user/message", seq: 10, time: 10, data: { content: [{ type: "text", text: "Visible prompt" }], source: { kind: "user", rpcId: "r1" } } });
+  const runtime = normalizeEvent("s1", { type: "user/message", seq: 11, time: 11, data: { content: [{ type: "text", text: "Current runtime context" }], source: { kind: "plugin", plugin: "system-prompt" } } });
+  const catalog = normalizeEvent("s1", { type: "user/message", seq: 12, time: 12, data: { content: [{ type: "text", text: "<system-reminder>catalog</system-reminder>" }], source: { kind: "skill-catalog" } } });
+  assert.equal(user.length, 1);
+  assert.equal(user[0].kind, "message.completed");
+  assert.equal(runtime.length, 0);
+  assert.equal(catalog.length, 0);
+});
 test("snapshot drops stale pending state; old request cannot reopen resolved approval", () => {
   const approval = { id: "a1", sessionId: "s1", toolName: "shell", reason: "Review", state: "pending" };
   const requested = eventSchema.parse({ kind: "attention.approval", id: "request", sessionId: "s1", seq: 1, time: 1, revision: 10, approval });

@@ -28,7 +28,10 @@ export default {
         const loopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket?.remoteAddress);
         if (!loopback || !expected.includes(host) || (req.method !== "GET" && req.headers.origin !== "http://" + host)) { res.writeHead(403); res.end("Local Harness management only"); return; }
         if (req.url?.split("?")[0] !== "/mobile-pwa" || !["GET", "POST"].includes(req.method)) { res.writeHead(404); res.end(); return; }
-        res.setHeader("Cache-Control", "no-store"); res.setHeader("Referrer-Policy", "no-referrer");
+        res.setHeader("Cache-Control", "no-store");
+        // Native form POSTs under no-referrer send Origin: null. Preserve the
+        // same-origin form's Origin so the strict CSRF check above can succeed.
+        res.setHeader("Referrer-Policy", "same-origin");
         res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
         let link = "";
         if (req.method === "POST") {

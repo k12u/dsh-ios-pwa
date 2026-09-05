@@ -23,6 +23,19 @@ try {
   }
   const root = "http://127.0.0.1:8787";
   if (!(await fetch(root + "/")).ok) throw new Error("PWA static serve failed");
+  const managementUrl = "http://localhost:8790/mobile-pwa";
+  const management = await fetch(managementUrl);
+  if (!management.ok || management.headers.get("referrer-policy") !== "same-origin") throw new Error("Local management must preserve native form POST Origin");
+  await management.body?.cancel();
+  for (const rejectedOrigin of [undefined, "null", "https://example.invalid"]) {
+    const rejected = await fetch(managementUrl, { method: "POST", headers: rejectedOrigin === undefined ? {} : { Origin: rejectedOrigin } });
+    await rejected.body?.cancel();
+    if (rejected.status !== 403) throw new Error("Local management accepted an invalid POST Origin");
+  }
+  const issued = await fetch(managementUrl, { method: "POST", headers: { Origin: "http://localhost:8790" } });
+  if (!issued.ok) throw new Error("Local management rejected a same-origin POST");
+  token = (await issued.text()).match(/\/pair\?t=([A-Za-z0-9_-]+)/)?.[1];
+  if (!token) throw new Error("Local management did not issue a pairing link");
   const paired = await fetch(root + "/api/pair", { method: "POST", headers: { Origin: "http://localhost:8787", "Content-Type": "application/json" }, body: JSON.stringify({ token, name: "Compatibility CI" }) });
   if (!paired.ok) throw new Error("Pairing failed");
   const cookie = paired.headers.get("set-cookie")?.split(";")[0];
@@ -51,7 +64,7 @@ try {
       } catch (error) { fail(error); }
     });
   });
-  console.log("Official Harness + plugin boot, PWA static serve, pairing, auth, normalized snapshot and WebSocket initial sync passed.");
+  console.log("Official Harness + plugin boot, PWA static serve, local management/CSRF, pairing, auth, normalized snapshot and WebSocket initial sync passed.");
   console.log("Model-dependent prompt/HITL/image/notification delivery remains a separate live acceptance check.");
 } finally {
   socket?.terminate();
