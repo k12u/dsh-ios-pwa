@@ -4,7 +4,7 @@
 
 A React / TypeScript PWA for operating DeepSeek Harness from a smartphone, plus a thin Gateway served from the same origin.
 
-**Verified against a real Harness RC.1: startup, HTTPS/WSS initial sync, and real model responses to text prompts. Acceptance testing — including browser operation, iPhone / Android, and Push delivery — is not yet complete.** Target APIs were cross-checked against the official Harness 0.1.2-rc.1 distribution and the reference Gateway 0.7.1. Current limitations and open verification items are recorded in [docs/acceptance.md](docs/acceptance.md).
+**Verified against a real Harness RC.1: startup, HTTPS/WSS initial sync, and real model responses to text prompts. Acceptance testing — including browser operation, iPhone / Android, and Push delivery — is not yet complete.** Target APIs were cross-checked against the official Harness 0.1.2-rc.1 distribution and the reference Gateway 0.7.1.
 
 ## Local preview
 

@@ -4,7 +4,7 @@
 
 DeepSeek Harness をスマートフォンから操作する React / TypeScript PWA と、同一 origin で配信する薄い Gateway。
 
-**実 Harness RC.1 の起動・HTTPS/WSS 初期同期・text prompt の実モデル応答まで確認済みです。ブラウザ操作、iPhone / Android、Push 配信を含む受け入れ検証はまだ完了していません。** 対象 API は公式 Harness 0.1.2-rc.1 の配布物と参考 Gateway 0.7.1 に照合しました。現在の制約と確認項目は [docs/acceptance.md](docs/acceptance.md) に記録しています。
+**実 Harness RC.1 の起動・HTTPS/WSS 初期同期・text prompt の実モデル応答まで確認済みです。ブラウザ操作、iPhone / Android、Push 配信を含む受け入れ検証はまだ完了していません。** 対象 API は公式 Harness 0.1.2-rc.1 の配布物と参考 Gateway 0.7.1 に照合しました。
 
 ## ローカルプレビュー
 

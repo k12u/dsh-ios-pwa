@@ -5,3 +5,4 @@ gateway/public/
 .env
 *.tgz
 test-results/
+docs/acceptance.md
