@@ -1,6 +1,6 @@
 # DSH Mobile
 
-English | [日本語](ja.md)
+[English](README.md) | 日本語
 
 DeepSeek Harness をスマートフォンから操作する React / TypeScript PWA と、同一 origin で配信する薄い Gateway。
 
