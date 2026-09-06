@@ -43,11 +43,13 @@ export function createGateway(adapter: HarnessAdapter, options: ServerOptions) {
     const value = await adapter.snapshot();
     return snapshotSchema.parse({ ...value, kind: "snapshot", revision: cut });
   }
+  const failurePath = (req: IncomingMessage) => { try { return new URL(req.url ?? "/", origin).pathname; } catch { return (req.url ?? "/").split("?")[0]; } };
   const server = http.createServer((req, res) => { void handle(req, res).catch(error => {
-    if (res.headersSent) { res.destroy(); return; }
+    const path = failurePath(req);
+    if (res.headersSent) { console.error("[mobile-pwa] Request failed:", req.method, path, error); res.destroy(); return; }
     if (error instanceof z.ZodError) json(res, { code: "validation", message: "Invalid request fields" }, 400);
     else if (error instanceof GatewayError) json(res, { code: error.code, message: error.message }, error.status);
-    else json(res, { code: "unavailable", message: "The host could not complete this request." }, 503);
+    else { console.error("[mobile-pwa] Request failed:", req.method, path, error); json(res, { code: "unavailable", message: "The host could not complete this request." }, 503); }
   }); });
   server.on("error", error => console.error("[mobile-pwa] Listener unavailable:", error.message));
   server.requestTimeout = 30_000;
@@ -150,7 +152,7 @@ export function createGateway(adapter: HarnessAdapter, options: ServerOptions) {
           ws.send(JSON.stringify(value));
           for (const event of client.buffered ?? []) ws.send(JSON.stringify(event));
           client.buffered = undefined;
-        }).catch(() => ws.close(1013, "Host unavailable"));
+        }).catch(error => { if (!(error instanceof GatewayError)) console.error("[mobile-pwa] Upgrade failed:", req.method, failurePath(req), error); ws.close(1013, "Host unavailable"); });
       });
     } catch (error) { const status = error instanceof GatewayError ? error.status : 400; socket.end("HTTP/1.1 " + status + " Rejected\r\nConnection: close\r\n\r\n"); }
   });
