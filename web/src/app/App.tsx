@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { GATEWAY_VERSION, type ModelsDTO, type SendPromptInput } from "@dsh-mobile/protocol";
-import { useStore, projectConversation, store } from "../state/store";
+import type { Message } from "@dsh-mobile/domain";
+import { useStore, projectConversation, store, type AppState } from "../state/store";
 import { projectInbox } from "../projections/inbox";
 import { api, loadHistory } from "../api/gateway-client";
 import { connection } from "../sync/connection";
@@ -11,7 +12,7 @@ import "./styles.css";
 
 const labels: Record<string, string> = { approval: "Approval required", question: "An answer is needed", completed: "Completed", pending: "Not started", failed: "Failed", waiting: "Waiting for input", running: "Running", idle: "Ready", unknown: "Status unavailable" };
 function Icon({ name }: { name: string }) {
-  const paths: Record<string, string> = { inbox: "M4 4h16v16H4z M4 13h5l2 3h2l2-3h5", tasks: "m4 6 2 2 4-4 M13 6h7 M4 14l2 2 4-4 M13 14h7 M13 20h7", sessions: "M4 4h16v13H9l-5 4z M8 8h8 M8 12h5", settings: "M4 7h16 M4 17h16 M8 4v6 M16 14v6", arrow: "m9 5 7 7-7 7", back: "m15 5-7 7 7 7", plus: "M12 5v14 M5 12h14", send: "m5 12 7-7 7 7 M12 5v15", image: "M4 4h16v16H4z m0 12 5-5 4 4 3-3 4 4 M15 8h.01", check: "m5 12 4 4L19 6" };
+  const paths: Record<string, string> = { inbox: "M4 4h16v16H4z M4 13h5l2 3h2l2-3h5", tasks: "m4 6 2 2 4-4 M13 6h7 M4 14l2 2 4-4 M13 14h7 M13 20h7", sessions: "M4 4h16v13H9l-5 4z M8 8h8 M8 12h5", settings: "M4 7h16 M4 17h16 M8 4v6 M16 14v6", arrow: "m9 5 7 7-7 7", back: "m15 5-7 7 7 7", plus: "M12 5v14 M5 12h14", send: "m5 12 7-7 7 7 M12 5v15", image: "M4 4h16v16H4z m0 12 5-5 4 4 3-3 4 4 M15 8h.01", check: "m5 12 4 4L19 6", chevron: "m6 9 6 6 6-6" };
   return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name] ?? paths.sessions}/></svg>;
 }
 function initialSession() { const match = location.pathname.match(/^\/session\/([^/]+)$/); try { return match ? decodeURIComponent(match[1]) : undefined; } catch { return undefined; } }
@@ -50,7 +51,6 @@ export function App() {
     <aside className="desktop-rail"><div className="product-name">DSH Mobile</div><p className="rail-label">WORKSPACE</p>{["inbox", "tasks", "sessions"].map(name => <button key={name} className={tab === name && !selected ? "selected" : ""} onClick={() => { back(); setTab(name); }}><Icon name={name}/>{name[0].toUpperCase() + name.slice(1)}{name === "inbox" && needs.length > 0 && <span className="count">{needs.length}</span>}</button>)}<div className="rail-bottom"><span className={"dot " + (online ? "live" : "")}/>{state.host?.name ?? "Connecting to host"}</div></aside>
     <div className="main-column">
       <header className="topbar"><div className="view-identity"><span className={"dot " + (online ? "live" : "")} aria-hidden="true"/><small>{state.host?.name ?? "Connecting"}</small></div><button className="icon-button" aria-label="Settings" onClick={() => { back(); setTab("settings"); }}><Icon name="settings"/></button></header>
-      {!online && <div className="connection-banner" role="status"><span className="dot"/>{state.connection === "connecting" ? "Connecting and syncing…" : "Offline · showing last known state"}<button onClick={() => void connection.connect()}>Retry</button></div>}
       {state.host?.id === "demo" && <div className="demo-banner">LOCAL PREVIEW <span>No AI model is connected</span></div>}
       {update && <div className="connection-banner">An update is available.<button disabled={busy} onClick={() => { if (!busy) { void navigator.serviceWorker?.getRegistration().then(r => r?.waiting?.postMessage("ACTIVATE")); location.reload(); } }}>Reload when ready</button></div>}
       {(error || state.error) && <div className="error-banner" role="alert">{error || state.error}<button onClick={() => setError("")}>Dismiss</button></div>}
@@ -61,11 +61,53 @@ export function App() {
         {tab === "sessions" && <><div className="page-intro"><div className="eyebrow">PICK UP WHERE YOU LEFT OFF</div><h1>Conversations.</h1><p>A direct line to your workspace.</p></div><div className="session-controls">{supported("workspaces") && <select aria-label="Workspace" value={workspace} onChange={e => setWorkspace(e.target.value)}><option value="">All workspaces</option>{Object.values(state.workspaces).map(w => <option key={w.id} value={w.id}>{w.title}</option>)}</select>}<button className="primary" disabled={!online || busy || !supported("sessions")} onClick={() => void create()}><Icon name="plus"/>New session</button></div>{sessions.map(s => <button className="session-card" key={s.id} onClick={() => open(s.id)}><span className="session-icon"><Icon name="sessions"/></span><span className="card-copy"><strong>{s.title}</strong><small>{state.workspaces[s.workspaceId ?? ""]?.title ?? "Workspace"} · {labels[s.status] ?? s.status}</small></span><Icon name="arrow"/></button>)}{!sessions.length && <Empty title="Room for something new" detail="Create your first session above."/>}</>}
         {tab === "settings" && <Settings online={online}/>}
       </main>}
-      {!selected && <nav className="bottom-nav" aria-label="Main navigation">{["inbox", "tasks", "sessions"].map(name => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}><span className="nav-icon"><Icon name={name}/>{name === "inbox" && needs.length > 0 && <i>{needs.length}</i>}</span><span>{name[0].toUpperCase() + name.slice(1)}</span></button>)}</nav>}
+      {!selected && <nav className="bottom-nav" aria-label="Main navigation"><StatusLine status={state.connection} host={state.host?.name}/><div className="nav-row">{["inbox", "tasks", "sessions"].map(name => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}><span className="nav-icon"><Icon name={name}/>{name === "inbox" && needs.length > 0 && <i>{needs.length}</i>}</span><span>{name[0].toUpperCase() + name.slice(1)}</span></button>)}</div></nav>}
     </div>
   </div>;
 }
 function Empty({ title, detail }: { title: string; detail: string }) { return <div className="empty"><Icon name="check"/><h3>{title}</h3><p>{detail}</p></div>; }
+function dotClass(status: AppState["connection"]) { return status === "online" ? "dot live" : status === "connecting" ? "dot busy" : "dot down"; }
+function StatusLine({ status, host }: { status: AppState["connection"]; host?: string }) {
+  const label = status === "online" ? host ?? "Live" : status === "connecting" ? "Syncing…" : status === "error" ? "Reconnect" : "Offline · tap to retry";
+  return <button type="button" className={"status-line " + status} aria-label={"Connection: " + label + (status === "offline" || status === "error" ? ". Tap to reconnect." : "")} onClick={() => { if (status === "offline" || status === "error") void connection.start(); }}><span className={dotClass(status)} aria-hidden="true"/>{label}</button>;
+}
+function SessionStrip({ sessionId, online, messages }: { sessionId: string; online: boolean; messages: Message[] }) {
+  const state = useStore();
+  const [open, setOpen] = useState(false), [loading, setLoading] = useState(false), [issue, setIssue] = useState("");
+  const session = state.sessions[sessionId];
+  const first = messages.find(m => m.role === "user" && (m.text.trim() || m.images.length));
+  const earlier = Boolean(state.cursors[sessionId]);
+  const status = state.connection;
+  async function fill() {
+    setLoading(true); setIssue("");
+    try {
+      // Walk history pages back to the beginning so the first prompt is on
+      // screen even in long sessions. In memory only; nothing is persisted.
+      for (let page = 0; page < 50; page++) {
+        const current = store.get();
+        if ((current.events[sessionId] ?? []).some(e => "role" in e && e.role === "user")) return;
+        const cursor = current.cursors[sessionId];
+        if (!cursor) return;
+        await loadHistory(sessionId, cursor);
+      }
+      setIssue("The first prompt is older than the loaded history.");
+    } catch (e) { setIssue((e as Error).message); }
+    finally { setLoading(false); }
+  }
+  function toggle() {
+    const next = !open; setOpen(next); setIssue("");
+    if (next && !first && earlier && online) void fill();
+  }
+  const label = status === "online" ? "Live" : status === "connecting" ? "Syncing…" : status === "error" ? "Reconnect" : "Offline · retry";
+  const prompt = first ? first.text.trim() || "(images only)" : issue || (loading ? "Loading earlier messages…" : earlier ? (online ? "Loading earlier messages…" : "Reconnect to load the first prompt.") : "No prompt yet.");
+  return <>
+    {open && <div className="first-prompt" role="note"><small>First prompt</small><p>{prompt}</p></div>}
+    <div className="dock-strip">
+      <button type="button" className="chip-status" aria-label={"Connection: " + label + (status === "offline" || status === "error" ? ". Tap to reconnect." : "")} onClick={() => { if (status === "offline" || status === "error") void connection.start(); }}><span className={dotClass(status)} aria-hidden="true"/>{label}</button>
+      <button type="button" className="chip-title" aria-expanded={open} aria-label={(open ? "Hide " : "Show ") + "first prompt"} onClick={toggle}><span>{session?.title ?? "Session"}</span><Icon name="chevron"/></button>
+    </div>
+  </>;
+}
 function Pairing({ onPaired }: { onPaired: () => void }) {
   const [token, setToken] = useState(pairingToken), [name, setName] = useState("My phone"), [error, setError] = useState(""), [busy, setBusy] = useState(false);
   return <main className="pairing-page"><div className="brand"><span className="brand-mark">d</span>DSH Mobile</div><div className="pairing-illustration"><Icon name="sessions"/><span className="pairing-line"/><span className="brand-mark">d</span></div><div className="eyebrow">A DIRECT LINE TO YOUR AGENT</div><h1>Your workspace.<br/>In your pocket.</h1><p>Open a pairing link from your Harness host, or paste its one-time code below.</p><form onSubmit={e => { e.preventDefault(); setBusy(true); setError(""); void api("/api/pair", { token, name }).then(() => { setToken(""); onPaired(); }).catch(e => setError(e.message)).finally(() => setBusy(false)); }}><label>Device name<input value={name} maxLength={80} required onChange={e => setName(e.target.value)}/></label><label>One-time pairing code<input value={token} autoComplete="off" spellCheck={false} required onChange={e => setToken(e.target.value.trim())}/></label><button className="primary" disabled={busy || !token || !name.trim()}>{busy ? "Connecting…" : "Connect to workspace"}<Icon name="arrow"/></button>{error && <p role="alert" className="error-text">{error}</p>}</form><small className="muted">Pairing links expire after 5 minutes.<br/>Once connected, add this app to your Home Screen.</small></main>;
@@ -129,7 +171,7 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
       <div ref={tail}/>
     </div>
     {error && <div role="alert" className="error-banner">{error}</div>}
-    {view === "conversation" && <form className="composer" onSubmit={e => void send(e)}>{images.length > 0 && <div className="image-tray">{images.map((i, index) => <div key={index}><img src={"data:" + i.mediaType + ";base64," + i.data} alt={i.name}/><button type="button" aria-label={"Remove " + i.name} disabled={sending} onClick={() => setImages(images.filter((_, j) => index !== j))}>×</button></div>)}</div>}<textarea aria-label="Message your agent" placeholder={online ? "What would you like to work on?" : "Reconnect to send a message"} value={text} disabled={!online || sending} onChange={e => setText(e.target.value)} rows={2}/><div className="composer-actions"><div className="composer-options">{supported("models") && models && models.groups.length > 0 && <select aria-label="Model" value={modelValue} disabled={!online || sending || selecting} onChange={e => void pickModel(e.target.value)}>{!modelValue && <option value="">{model ? "Model unavailable" : "Model"}</option>}{models.groups.map(g => <optgroup key={g.id} label={g.name}>{g.models.map(m => <option key={m.id} value={g.id + "/" + m.id}>{m.name}</option>)}</optgroup>)}</select>}{supported("images") && <label className={"icon-button upload " + (!online || sending ? "disabled" : "")} aria-label="Attach image"><Icon name="image"/><input type="file" aria-label="Attach image" accept="image/png,image/jpeg,image/webp,image/gif" multiple disabled={!online || sending} onChange={e => { void upload(e.target.files); e.target.value = ""; }}/></label>}{supported("steer") && <select aria-label="Send mode" value={mode} disabled={!online || sending} onChange={e => setMode(e.target.value as "queue" | "steer")}><option value="queue">Queue</option><option value="steer">Steer</option></select>}</div><div className="actions">{supported("cancel") && state.sessions[sessionId]?.status === "running" && <button type="button" disabled={!online || sending} onClick={() => { void api("/api/cancel", { sessionId }).catch(e => setError(e.message)); }}>Stop</button>}<button className="send-button" aria-label="Send message" disabled={!online || sending || (!text.trim() && !images.length)}><Icon name="send"/></button></div></div><small className="composer-note">{mode === "steer" ? "Steer interrupts the current turn." : "Your message joins the agent's queue."}</small></form>}
+    <div className="composer-dock"><SessionStrip sessionId={sessionId} online={online} messages={messages}/>{view === "conversation" && <form className="composer" onSubmit={e => void send(e)}>{images.length > 0 && <div className="image-tray">{images.map((i, index) => <div key={index}><img src={"data:" + i.mediaType + ";base64," + i.data} alt={i.name}/><button type="button" aria-label={"Remove " + i.name} disabled={sending} onClick={() => setImages(images.filter((_, j) => index !== j))}>×</button></div>)}</div>}<textarea aria-label="Message your agent" placeholder={online ? "What would you like to work on?" : "Reconnect to send a message"} value={text} disabled={!online || sending} onChange={e => setText(e.target.value)} rows={2}/><div className="composer-actions"><div className="composer-options">{supported("models") && models && models.groups.length > 0 && <select aria-label="Model" value={modelValue} disabled={!online || sending || selecting} onChange={e => void pickModel(e.target.value)}>{!modelValue && <option value="">{model ? "Model unavailable" : "Model"}</option>}{models.groups.map(g => <optgroup key={g.id} label={g.name}>{g.models.map(m => <option key={m.id} value={g.id + "/" + m.id}>{m.name}</option>)}</optgroup>)}</select>}{supported("images") && <label className={"icon-button upload " + (!online || sending ? "disabled" : "")} aria-label="Attach image"><Icon name="image"/><input type="file" aria-label="Attach image" accept="image/png,image/jpeg,image/webp,image/gif" multiple disabled={!online || sending} onChange={e => { void upload(e.target.files); e.target.value = ""; }}/></label>}{supported("steer") && <select aria-label="Send mode" value={mode} disabled={!online || sending} onChange={e => setMode(e.target.value as "queue" | "steer")}><option value="queue">Queue</option><option value="steer">Steer</option></select>}</div><div className="actions">{supported("cancel") && state.sessions[sessionId]?.status === "running" && <button type="button" disabled={!online || sending} onClick={() => { void api("/api/cancel", { sessionId }).catch(e => setError(e.message)); }}>Stop</button>}<button className="send-button" aria-label="Send message" disabled={!online || sending || (!text.trim() && !images.length)}><Icon name="send"/></button></div></div><small className="composer-note">{mode === "steer" ? "Steer interrupts the current turn." : "Your message joins the agent's queue."}</small></form>}</div>
   </div>;
 }
 function Settings({ online }: { online: boolean }) {

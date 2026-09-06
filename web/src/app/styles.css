@@ -33,3 +33,23 @@
 .pair-qr svg{display:block;width:200px;height:auto}
 .pair-url{font-size:12px;overflow-wrap:anywhere}
 .pair-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* Bottom status dock: connection LED and session identity stay at the thumb zone. */
+.dot.busy{background:#d9a13f}
+.dot.down{background:#cf5f5f}
+.composer-dock{position:sticky;bottom:0;z-index:6;background-color:#f8f9fbf5;backdrop-filter:blur(20px);border-top:1px solid var(--line)}
+.composer-dock .composer{position:static;z-index:auto;background:transparent;backdrop-filter:none;border-top:0;padding-top:9px}
+.dock-strip{display:flex;align-items:center;gap:6px;min-height:26px;padding:3px 12px 1px;border-bottom:1px solid var(--line)}
+.chip-status{display:inline-flex;align-items:center;gap:5px;min-height:0;padding:3px 7px;border:0;border-radius:7px;background:transparent;color:var(--muted);font-size:10px;white-space:nowrap}
+.chip-status .dot{margin-left:0}
+.chip-title{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:5px;min-width:0;min-height:0;padding:4px 2px;border:0;background:transparent;color:#3f4552;font-size:11px;font-weight:600}
+.chip-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip-title svg{width:14px;height:14px;color:#9aa1ae;transition:transform .18s}
+.chip-title[aria-expanded="true"] svg{transform:rotate(180deg)}
+.first-prompt{padding:8px 15px 7px;border-bottom:1px solid var(--line);font-size:12px;color:#5a6172}
+.first-prompt small{display:block;margin-bottom:2px;font-size:9px;letter-spacing:1.1px;text-transform:uppercase;color:#a3abb8}
+.first-prompt p{max-height:20vh;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.status-line{display:flex;align-items:center;justify-content:center;gap:6px;min-height:24px;padding:3px 10px 2px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:#f3f5fa;color:var(--muted);font-size:10px;letter-spacing:.2px}
+.status-line .dot{margin-left:0}
+.bottom-nav{flex-direction:column;justify-content:flex-start;padding:0}
+.bottom-nav .nav-row{display:flex;justify-content:space-around;padding:10px 20px calc(9px + env(safe-area-inset-bottom))}
