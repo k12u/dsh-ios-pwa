@@ -7,6 +7,10 @@ function fakeContext() {
     typertGateway: {
       async invoke(call: any) {
         calls.push(call);
+        if (call.namespace === "agentPresets" && call.method === "list") return {
+          presets: [{ id: "creator", trust: "system", isDefault: false }, { id: "standard", name: "Standard", trust: "system", isDefault: true }],
+          authorable: true, hasDocument: false,
+        };
         if (call.method === "list") return { items: [{ sessionId: "s1", title: "Session", running: false, updatedAt: 1 }] };
         if (call.method === "create") return { sessionId: "s2" };
         if (call.method === "modelCatalog") return {
@@ -66,6 +70,29 @@ test("model endpoints unsupported by the host retire the models capability", asy
   try {
     await assert.rejects(adapter.models("s1"));
     assert.equal(adapter.capabilities().includes("models"), false);
+  } finally { adapter.dispose(); }
+});
+test("agent preset roster maps to the mobile DTO and the default switch targets the host settings namespace", async () => {
+  const h = fakeContext(), adapter = new DshAdapter(h.context);
+  try {
+    assert.equal(adapter.capabilities().includes("presets"), true);
+    assert.deepEqual(await adapter.presets(), { presets: [
+      { id: "creator", name: "creator", default: false },
+      { id: "standard", name: "Standard", default: true },
+    ] });
+    await adapter.selectPreset({ presetId: "minimal" });
+    const update = h.calls.find(c => c.namespace === "settings" && c.method === "update");
+    assert.deepEqual(update.args, { ns: "agent-presets", patch: { default: "minimal" } });
+  } finally { adapter.dispose(); }
+});
+test("preset endpoints unsupported by the host retire the presets capability", async () => {
+  const h = fakeContext();
+  const invoke = h.context.typertGateway.invoke.bind(h.context.typertGateway);
+  h.context.typertGateway.invoke = async (call: any) => { if (call.namespace === "agentPresets") throw { code: "unknown-method" }; return invoke(call); };
+  const adapter = new DshAdapter(h.context);
+  try {
+    await assert.rejects(adapter.presets());
+    assert.equal(adapter.capabilities().includes("presets"), false);
   } finally { adapter.dispose(); }
 });
 test("HITL question validation and resolved broadcast preserve deterministic decisions", async () => {

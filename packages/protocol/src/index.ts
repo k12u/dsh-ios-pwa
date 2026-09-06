@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const PROTOCOL = 1;
 export const GATEWAY_VERSION = "0.1.0";
-export const capabilities = ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer", "push", "files", "commands", "skills", "models"] as const;
+export const capabilities = ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer", "push", "files", "commands", "skills", "models", "presets"] as const;
 export type Capability = typeof capabilities[number];
 const id = z.string().min(1).max(256);
 const text = z.string().max(200_000);
@@ -69,6 +69,12 @@ export const selectModelSchema = z.object({ sessionId: id, provider: z.string().
 export type ModelSelectionDTO = z.infer<typeof modelSelectionSchema>;
 export type ModelsDTO = z.infer<typeof modelsSchema>;
 export type SelectModelInput = z.infer<typeof selectModelSchema>;
+export const presetOptionSchema = z.object({ id, name: z.string().min(1).max(256), description: z.string().min(1).max(512).optional(), default: z.boolean() });
+export const presetsSchema = z.object({ presets: z.array(presetOptionSchema).min(1).max(50) });
+export const setPresetSchema = z.object({ presetId: id });
+export type PresetsDTO = z.infer<typeof presetsSchema>;
+export type PresetDTO = z.infer<typeof presetOptionSchema>;
+export type SetPresetInput = z.infer<typeof setPresetSchema>;
 export const pairingSchema = z.object({ token: z.string().min(32).max(128), name: z.string().trim().min(1).max(80).default("Mobile browser") });
 export const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048), keys: z.object({ p256dh: z.string().regex(/^[A-Za-z0-9_-]+$/).length(87), auth: z.string().regex(/^[A-Za-z0-9_-]+$/).length(22) }) });
 export type PushSubscriptionDTO = z.infer<typeof pushSubscriptionSchema>;

@@ -4,7 +4,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
-import { PROTOCOL, GATEWAY_VERSION, approvalResponseSchema, createdSessionSchema, createSessionSchema, eventSchema, historyPageSchema, modelsSchema, pairingSchema, promptSchema, pushSubscriptionSchema, questionResponseSchema, selectModelSchema, snapshotSchema, type MobileEvent } from "@dsh-mobile/protocol";
+import { PROTOCOL, GATEWAY_VERSION, approvalResponseSchema, createdSessionSchema, createSessionSchema, eventSchema, historyPageSchema, modelsSchema, pairingSchema, presetsSchema, promptSchema, pushSubscriptionSchema, questionResponseSchema, selectModelSchema, setPresetSchema, snapshotSchema, type MobileEvent } from "@dsh-mobile/protocol";
 import { Registry, RateLimiter, hash } from "./auth/registry";
 import { GatewayError, type HarnessAdapter } from "./normalization/adapter";
 import { PushService, validatePushEndpoint } from "./push/web-push";
@@ -86,6 +86,8 @@ export function createGateway(adapter: HarnessAdapter, options: ServerOptions) {
       const modelsMatch = path.match(/^\/api\/sessions\/([^/]+)\/models$/);
       if (req.method === "GET" && modelsMatch) { requireCapability("models"); json(res, modelsSchema.parse(await adapter.models(decodeURIComponent(modelsMatch[1])))); return; }
       if (req.method === "POST" && path === "/api/model") { requireCapability("models"); await adapter.selectModel(selectModelSchema.parse(await body(req))); json(res, { accepted: true }); return; }
+      if (req.method === "GET" && path === "/api/presets") { requireCapability("presets"); json(res, presetsSchema.parse(await adapter.presets())); return; }
+      if (req.method === "POST" && path === "/api/preset") { requireCapability("presets"); await adapter.selectPreset(setPresetSchema.parse(await body(req))); json(res, { accepted: true }); return; }
       const imageMatch = path.match(/^\/api\/sessions\/([^/]+)\/images\/([^/]+)$/);
       if (req.method === "GET" && imageMatch) {
         requireCapability("images");

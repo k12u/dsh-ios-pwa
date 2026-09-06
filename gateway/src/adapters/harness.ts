@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import { eventSchema, modelsSchema, questionSchema, type ApprovalDTO, type ApprovalResponse, type Capability, type MobileEvent, type QuestionDTO, type QuestionResponse, type SelectModelInput, type SendPromptInput, type TaskDTO } from "@dsh-mobile/protocol";
+import { eventSchema, modelsSchema, presetsSchema, questionSchema, type ApprovalDTO, type ApprovalResponse, type Capability, type MobileEvent, type QuestionDTO, type QuestionResponse, type SelectModelInput, type SendPromptInput, type SetPresetInput, type TaskDTO } from "@dsh-mobile/protocol";
 import { createDshHostAdapter } from "./upstream/dsh-host-adapter.mjs";
 import { normalizeEvent, normalizeTasks } from "./harness-events";
 import { GatewayError, type HarnessAdapter } from "../normalization/adapter";
@@ -23,7 +23,7 @@ export class DshAdapter implements HarnessAdapter {
   private disposers: (() => void)[] = [];
   private abort = new AbortController();
   private counter = 0;
-  private enabled = new Set<Capability>(["sessions", "streaming", "approvals", "questions", "cancel", "steer", "images", "workspaces", "tasks", "models"]);
+  private enabled = new Set<Capability>(["sessions", "streaming", "approvals", "questions", "cancel", "steer", "images", "workspaces", "tasks", "models", "presets"]);
   constructor(private ctx: HarnessContext, private shouldHandle = () => true) {
     this.api = createDshHostAdapter(ctx.typertGateway);
     this.disposers.push(ctx.on("session/event", (session, event) => {
@@ -61,7 +61,7 @@ export class DshAdapter implements HarnessAdapter {
     const catalog = this.ctx.typert?.local;
     if (typeof catalog?.get !== "function") return [...this.enabled];
     // Strict descriptor presence takes priority over version strings.
-    const requires: Partial<Record<Capability, string[]>> = { sessions: ["session/list", "session/create", "session/prompt"], streaming: ["session/follow"], workspaces: ["workspace/follow"], images: ["session/attachment", "session/prompt"], cancel: ["session/cancel"], steer: ["session/prompt"], tasks: ["session/control"], models: ["session/modelCatalog", "session/selectModel"] };
+    const requires: Partial<Record<Capability, string[]>> = { sessions: ["session/list", "session/create", "session/prompt"], streaming: ["session/follow"], workspaces: ["workspace/follow"], images: ["session/attachment", "session/prompt"], cancel: ["session/cancel"], steer: ["session/prompt"], tasks: ["session/control"], models: ["session/modelCatalog", "session/selectModel"], presets: ["agentPresets/list"] };
     return [...this.enabled].filter(cap => !requires[cap] || requires[cap]!.every(endpoint => catalog.get(endpoint) !== undefined));
   }
   private emit(event: MobileEvent) { for (const listener of this.listeners) listener(event); }
@@ -164,6 +164,25 @@ export class DshAdapter implements HarnessAdapter {
       } catch { /* Selection works without an effort hint. */ }
       await this.api.sessions.selectModel(payload, AbortSignal.timeout(20_000));
     } catch (e: any) { if (/not.found|unknown|unsupported/i.test(String(e?.code))) this.enabled.delete("models"); throw e; }
+  }
+  async presets() {
+    let roster: any;
+    try { roster = await this.api.agentPresets.list({}, AbortSignal.timeout(20_000)); }
+    catch (e: any) { if (/not.found|unknown|unsupported/i.test(String(e?.code))) this.enabled.delete("presets"); throw e; }
+    const raw: any[] = Array.isArray(roster?.presets) ? roster.presets : [];
+    const presets = raw.map((p: any) => ({
+      id: String(p?.id ?? ""),
+      name: String(p?.name ?? p?.label ?? p?.title ?? "") || String(p?.id ?? ""),
+      ...(typeof p?.description === "string" && p.description ? { description: p.description } : {}),
+      default: p?.isDefault === true,
+    })).filter((p: { id: string }) => p.id);
+    return presetsSchema.parse({ presets });
+  }
+  async selectPreset(input: SetPresetInput) {
+    try {
+      // The host keeps the agent-preset default in its own settings namespace.
+      await this.api.settings.update({ ns: "agent-presets", patch: { default: input.presetId } }, AbortSignal.timeout(20_000));
+    } catch (e: any) { if (/not.found|unknown|unsupported/i.test(String(e?.code))) this.enabled.delete("presets"); throw e; }
   }
   async respondApproval(input: ApprovalResponse) {
     const p = this.approvals.get(input.id);
