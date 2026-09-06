@@ -5,7 +5,19 @@ function fakeContext() {
   const listeners = new Map<string, (...args: any[]) => any>(), calls: any[] = [];
   const context = {
     typertGateway: {
-      async invoke(call: any) { calls.push(call); if (call.method === "list") return { items: [{ sessionId: "s1", title: "Session", running: false, updatedAt: 1 }] }; if (call.method === "create") return { sessionId: "s2" }; return { accepted: true }; },
+      async invoke(call: any) {
+        calls.push(call);
+        if (call.method === "list") return { items: [{ sessionId: "s1", title: "Session", running: false, updatedAt: 1 }] };
+        if (call.method === "create") return { sessionId: "s2" };
+        if (call.method === "modelCatalog") return {
+          default: { provider: "deepseek", model: "chat", reasoningEffort: "high" },
+          routableProviders: ["deepseek"],
+          groups: [{ id: "deepseek", name: "DeepSeek", models: [{ id: "chat", name: "Chat" }, { id: "reasoner", name: "Reasoner", reasoning: { efforts: [{ id: "low", name: "Low" }], defaultEffort: "low" } }] }],
+          failures: [],
+        };
+        if (call.method === "selectModel") return { selected: call.args.request };
+        return { accepted: true };
+      },
       async stream(call: any) {
         calls.push(call);
         return (async function* () {
@@ -32,6 +44,28 @@ test("adapter translates domain calls to verified RC.1 endpoint shapes", async (
     await adapter.sendPrompt({ sessionId: "s1", requestId: "request-id", text: "Hello", mode: "steer", images: [] });
     assert.deepEqual(h.calls.find(c => c.method === "prompt").args.request, { sessionId: "s1", requestId: "request-id", mode: "steer", content: [{ type: "text", text: "Hello" }] });
     await adapter.cancelSession("s1"); assert.deepEqual(h.calls.find(c => c.method === "cancel").args, { request: { sessionId: "s1" } });
+  } finally { adapter.dispose(); }
+});
+test("model catalog maps upstream selection state into the mobile DTO and preserves reasoning effort", async () => {
+  const h = fakeContext(), adapter = new DshAdapter(h.context);
+  try {
+    assert.equal(adapter.capabilities().includes("models"), true);
+    const catalog = await adapter.models("s1");
+    assert.deepEqual(catalog, { sessionId: "s1", current: { provider: "deepseek", model: "chat" }, routable: true, groups: [{ id: "deepseek", name: "DeepSeek", models: [{ id: "chat", name: "Chat" }, { id: "reasoner", name: "Reasoner" }] }] });
+    await adapter.selectModel({ sessionId: "s1", provider: "deepseek", model: "chat" });
+    assert.deepEqual(h.calls.find(c => c.method === "selectModel").args.request, { sessionId: "s1", provider: "deepseek", model: "chat", reasoningEffort: "high" });
+    await adapter.selectModel({ sessionId: "s1", provider: "deepseek", model: "reasoner" });
+    assert.deepEqual(h.calls.find(c => c.method === "selectModel" && c.args.request.model === "reasoner").args.request, { sessionId: "s1", provider: "deepseek", model: "reasoner", reasoningEffort: "low" });
+  } finally { adapter.dispose(); }
+});
+test("model endpoints unsupported by the host retire the models capability", async () => {
+  const h = fakeContext();
+  const invoke = h.context.typertGateway.invoke.bind(h.context.typertGateway);
+  h.context.typertGateway.invoke = async (call: any) => { if (call.method === "modelCatalog") throw { code: "unknown-method" }; return invoke(call); };
+  const adapter = new DshAdapter(h.context);
+  try {
+    await assert.rejects(adapter.models("s1"));
+    assert.equal(adapter.capabilities().includes("models"), false);
   } finally { adapter.dispose(); }
 });
 test("HITL question validation and resolved broadcast preserve deterministic decisions", async () => {

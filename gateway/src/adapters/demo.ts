@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ApprovalResponse, Capability, MobileEvent, QuestionResponse, SendPromptInput, Snapshot } from "@dsh-mobile/protocol";
+import type { ApprovalResponse, Capability, MobileEvent, QuestionResponse, SelectModelInput, SendPromptInput, Snapshot } from "@dsh-mobile/protocol";
 import { GatewayError, type HarnessAdapter } from "../normalization/adapter";
 export class DemoAdapter implements HarnessAdapter {
   private listeners = new Set<(event: MobileEvent) => void>();
@@ -7,6 +7,11 @@ export class DemoAdapter implements HarnessAdapter {
   private images = new Map<string, { metadata: any; data: Uint8Array; sessionId: string }>();
   private timers = new Map<string, ReturnType<typeof setInterval>>();
   private seq = 0;
+  private selections = new Map<string, { provider: string; model: string }>();
+  private catalog = { default: { provider: "deepseek", model: "deepseek-chat" }, groups: [
+    { id: "deepseek", name: "DeepSeek", models: [{ id: "deepseek-chat", name: "DeepSeek Chat" }, { id: "deepseek-reasoner", name: "DeepSeek Reasoner" }] },
+    { id: "openai", name: "OpenAI", models: [{ id: "gpt-5", name: "GPT-5" }] },
+  ] };
   private state: Omit<Snapshot, "kind" | "revision"> = {
     host: { id: "demo", name: "Local preview", status: "online", adapter: "Demo · no agent runtime" },
     workspaces: [{ id: "workspace", title: "Mobile workspace", path: "~/projects/mobile" }],
@@ -23,7 +28,7 @@ export class DemoAdapter implements HarnessAdapter {
     this.emit("welcome", { kind: "tool.updated", toolId: "inspect", name: "Inspect workspace", status: "completed", preview: "Reviewed the project structure." });
     this.emit("welcome", { kind: "message.completed", messageId: "welcome-agent", role: "assistant", text: "Your workspace is ready.\n\nUse **Inbox** for decisions that need your attention, **Tasks** to follow progress, and **Sessions** to continue a conversation.\n\nThis is a local preview. Messages stream here without calling an AI model.", images: [] });
   }
-  capabilities(): Capability[] { return ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer"]; }
+  capabilities(): Capability[] { return ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer", "models"]; }
   snapshot() { return Promise.resolve(structuredClone(this.state)); }
   history(sessionId: string, cursor?: string) {
     this.session(sessionId); const before = cursor === undefined ? Infinity : Number(cursor);
@@ -80,6 +85,16 @@ export class DemoAdapter implements HarnessAdapter {
     q.state = "answered"; this.emit(q.sessionId, { kind: "attention.resolved", attentionId: q.id, target: "question", state: q.state });
   }
   async attachment(sessionId: string, id: string) { const image = this.images.get(id); if (!image || image.sessionId !== sessionId) throw new GatewayError(404, "image-not-found", "Image not found"); return image; }
+  async models(sessionId: string) {
+    this.session(sessionId);
+    return { sessionId, current: structuredClone(this.selections.get(sessionId) ?? this.catalog.default), routable: true, groups: structuredClone(this.catalog.groups) };
+  }
+  async selectModel(input: SelectModelInput) {
+    this.session(input.sessionId);
+    const group = this.catalog.groups.find(g => g.id === input.provider);
+    if (!group?.models.some(m => m.id === input.model)) throw new GatewayError(400, "unknown-model", "That model is not available.");
+    this.selections.set(input.sessionId, { provider: input.provider, model: input.model });
+  }
   subscribe(fn: (e: MobileEvent) => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   dispose() { this.timers.forEach(clearInterval); this.listeners.clear(); }
 }

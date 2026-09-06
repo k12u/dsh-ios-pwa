@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { GATEWAY_VERSION, type SendPromptInput } from "@dsh-mobile/protocol";
+import { GATEWAY_VERSION, type ModelsDTO, type SendPromptInput } from "@dsh-mobile/protocol";
 import { useStore, projectConversation, store } from "../state/store";
 import { projectInbox } from "../projections/inbox";
 import { api, loadHistory } from "../api/gateway-client";
@@ -74,8 +74,29 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
   const state = useStore(); const { messages, tools } = projectConversation(state.events[sessionId] ?? []);
   const [text, setText] = useState(""), [mode, setMode] = useState<"queue" | "steer">("queue"), [images, setImages] = useState<SendPromptInput["images"]>([]);
   const [sending, setSending] = useState(false), [error, setError] = useState(""), [loading, setLoading] = useState(false);
+  const [models, setModels] = useState<ModelsDTO>(), [model, setModel] = useState<{ provider: string; model: string } | undefined>(undefined), [selecting, setSelecting] = useState(false);
   const tail = useRef<HTMLDivElement>(null), nearBottom = useRef(true), request = useRef<{ id: string; digest: string } | undefined>(undefined);
   const supported = (cap: string) => state.hello?.capabilities.includes(cap) ?? false;
+  const modelsUrl = "/api/sessions/" + encodeURIComponent(sessionId) + "/models";
+  useEffect(() => {
+    if (!online || !supported("models")) return;
+    let live = true;
+    void api<ModelsDTO>(modelsUrl).then(m => { if (live) { setModels(m); setModel(m.current ? { provider: m.current.provider, model: m.current.model } : undefined); } }).catch(() => {});
+    return () => { live = false; };
+  }, [sessionId, online, state.hello]);
+  async function pickModel(value: string) {
+    if (!models) return;
+    const cut = value.indexOf("/"); if (cut < 0) return;
+    const previous = model, selection = { provider: value.slice(0, cut), model: value.slice(cut + 1) };
+    setSelecting(true); setError("");
+    try {
+      await api("/api/model", { sessionId, ...selection });
+      setModel(selection); setModels({ ...models, current: selection });
+      const refreshed = await api<ModelsDTO>(modelsUrl);
+      setModels(refreshed); setModel(refreshed.current ? { provider: refreshed.current.provider, model: refreshed.current.model } : undefined);
+    } catch (e) { setError((e as Error).message); setModel(previous); }
+    finally { setSelecting(false); }
+  }
   useEffect(() => { if (nearBottom.current) tail.current?.scrollIntoView({ block: "end" }); }, [messages.at(-1)?.text, view]);
   useEffect(() => { const listener = () => { nearBottom.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 220; }; window.addEventListener("scroll", listener, { passive: true }); return () => window.removeEventListener("scroll", listener); }, []);
   async function send(e: FormEvent) {
@@ -99,6 +120,7 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
     } catch (e) { setError((e as Error).message); }
   }
   const imageUrl = (id: string) => "/api/sessions/" + encodeURIComponent(sessionId) + "/images/" + encodeURIComponent(id);
+  const modelValue = model && models?.groups.some(g => g.id === model.provider && g.models.some(m => m.id === model.model)) ? model.provider + "/" + model.model : "";
   return <div className="conversation-layout">
     <div className="conversation-body">
       {view === "conversation" && <>{state.cursors[sessionId] && <button className="load-earlier" disabled={!online || loading} onClick={() => { setLoading(true); void loadHistory(sessionId, state.cursors[sessionId]).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>{loading ? "Loading…" : "Load earlier messages"}</button>}{messages.map(m => <article className={"message " + m.role} key={m.id}><div className="message-author">{m.role === "assistant" ? <><span className="agent-mark">d</span>Agent</> : "You"}{!m.complete && <span className="streaming-dot"/>}</div><Markdown text={m.text}/>{m.images.map(i => <a href={imageUrl(i.id)} target="_blank" rel="noreferrer" key={i.id}><img className="message-image" src={imageUrl(i.id)} alt={i.name} loading="lazy"/></a>)}</article>)}{tools.length > 0 && <details className="tool-summary"><summary>{tools.length} tool operation{tools.length > 1 ? "s" : ""}</summary>{tools.map(t => <p key={t.id}>{t.status === "completed" ? "✓" : t.status === "failed" ? "!" : "●"} {t.name}</p>)}</details>}{supported("approvals") && Object.values(state.approvals).filter(a => a.sessionId === sessionId).map(a => <ApprovalCard key={a.id + ":" + state.revision} approval={a} online={online}/>)}{supported("questions") && Object.values(state.questions).filter(q => q.sessionId === sessionId).map(q => <QuestionCard key={q.id + ":" + state.revision} question={q} online={online}/>)}{!messages.length && <Empty title="Start a conversation" detail="Tell your agent what you'd like to work on."/>}</>}
@@ -107,7 +129,7 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
       <div ref={tail}/>
     </div>
     {error && <div role="alert" className="error-banner">{error}</div>}
-    {view === "conversation" && <form className="composer" onSubmit={e => void send(e)}>{images.length > 0 && <div className="image-tray">{images.map((i, index) => <div key={index}><img src={"data:" + i.mediaType + ";base64," + i.data} alt={i.name}/><button type="button" aria-label={"Remove " + i.name} disabled={sending} onClick={() => setImages(images.filter((_, j) => index !== j))}>×</button></div>)}</div>}<textarea aria-label="Message your agent" placeholder={online ? "What would you like to work on?" : "Reconnect to send a message"} value={text} disabled={!online || sending} onChange={e => setText(e.target.value)} rows={2}/><div className="composer-actions"><div className="composer-options">{supported("images") && <label className={"icon-button upload " + (!online || sending ? "disabled" : "")} aria-label="Attach image"><Icon name="image"/><input type="file" aria-label="Attach image" accept="image/png,image/jpeg,image/webp,image/gif" multiple disabled={!online || sending} onChange={e => { void upload(e.target.files); e.target.value = ""; }}/></label>}{supported("steer") && <select aria-label="Send mode" value={mode} disabled={!online || sending} onChange={e => setMode(e.target.value as "queue" | "steer")}><option value="queue">Queue</option><option value="steer">Steer</option></select>}</div><div className="actions">{supported("cancel") && state.sessions[sessionId]?.status === "running" && <button type="button" disabled={!online || sending} onClick={() => { void api("/api/cancel", { sessionId }).catch(e => setError(e.message)); }}>Stop</button>}<button className="send-button" aria-label="Send message" disabled={!online || sending || (!text.trim() && !images.length)}><Icon name="send"/></button></div></div><small className="composer-note">{mode === "steer" ? "Steer interrupts the current turn." : "Your message joins the agent's queue."}</small></form>}
+    {view === "conversation" && <form className="composer" onSubmit={e => void send(e)}>{images.length > 0 && <div className="image-tray">{images.map((i, index) => <div key={index}><img src={"data:" + i.mediaType + ";base64," + i.data} alt={i.name}/><button type="button" aria-label={"Remove " + i.name} disabled={sending} onClick={() => setImages(images.filter((_, j) => index !== j))}>×</button></div>)}</div>}<textarea aria-label="Message your agent" placeholder={online ? "What would you like to work on?" : "Reconnect to send a message"} value={text} disabled={!online || sending} onChange={e => setText(e.target.value)} rows={2}/><div className="composer-actions"><div className="composer-options">{supported("models") && models && models.groups.length > 0 && <select aria-label="Model" value={modelValue} disabled={!online || sending || selecting} onChange={e => void pickModel(e.target.value)}>{!modelValue && <option value="">{model ? "Model unavailable" : "Model"}</option>}{models.groups.map(g => <optgroup key={g.id} label={g.name}>{g.models.map(m => <option key={m.id} value={g.id + "/" + m.id}>{m.name}</option>)}</optgroup>)}</select>}{supported("images") && <label className={"icon-button upload " + (!online || sending ? "disabled" : "")} aria-label="Attach image"><Icon name="image"/><input type="file" aria-label="Attach image" accept="image/png,image/jpeg,image/webp,image/gif" multiple disabled={!online || sending} onChange={e => { void upload(e.target.files); e.target.value = ""; }}/></label>}{supported("steer") && <select aria-label="Send mode" value={mode} disabled={!online || sending} onChange={e => setMode(e.target.value as "queue" | "steer")}><option value="queue">Queue</option><option value="steer">Steer</option></select>}</div><div className="actions">{supported("cancel") && state.sessions[sessionId]?.status === "running" && <button type="button" disabled={!online || sending} onClick={() => { void api("/api/cancel", { sessionId }).catch(e => setError(e.message)); }}>Stop</button>}<button className="send-button" aria-label="Send message" disabled={!online || sending || (!text.trim() && !images.length)}><Icon name="send"/></button></div></div><small className="composer-note">{mode === "steer" ? "Steer interrupts the current turn." : "Your message joins the agent's queue."}</small></form>}
   </div>;
 }
 function Settings({ online }: { online: boolean }) {
