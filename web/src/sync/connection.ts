@@ -8,15 +8,23 @@ export class Connection {
   private generation = 0;
   private attempt = 0;
   private stopped = true;
+  private wired = false;
   private selected?: string;
   private resumed = () => { if (document.visibilityState === "visible" && !this.stopped) this.connect(); else this.disconnect(); };
+  private dropped = () => { if (!this.stopped) { this.disconnect(); void this.connect(); } };
   start() {
     this.stopped = false;
+    if (!this.wired) {
+      this.wired = true;
+      document.addEventListener("visibilitychange", this.resumed); window.addEventListener("pageshow", this.resumed); window.addEventListener("online", this.resumed); window.addEventListener("offline", this.dropped);
+    }
     void readMetadata().then(value => { if (value && !store.get().host && store.get().connection !== "pairing") store.dispatch({ type: "snapshot", value }); });
-    document.addEventListener("visibilitychange", this.resumed); window.addEventListener("pageshow", this.resumed); window.addEventListener("online", this.resumed);
     void this.connect();
   }
-  stop() { this.stopped = true; this.disconnect(); document.removeEventListener("visibilitychange", this.resumed); window.removeEventListener("pageshow", this.resumed); window.removeEventListener("online", this.resumed); }
+  stop() {
+    this.stopped = true; this.disconnect();
+    if (this.wired) { this.wired = false; document.removeEventListener("visibilitychange", this.resumed); window.removeEventListener("pageshow", this.resumed); window.removeEventListener("online", this.resumed); window.removeEventListener("offline", this.dropped); }
+  }
   async select(id: string) { this.selected = id; if (store.get().connection === "online") await loadHistory(id); }
   private disconnect() { clearTimeout(this.retry); this.generation++; this.socket?.close(); this.socket = undefined; }
   async connect() {
