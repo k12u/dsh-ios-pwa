@@ -64,6 +64,28 @@ test("a paired device can issue one-time links for additional devices", async ()
     assert.equal((await h.request("/api/pair", { body: { token, name: "Reuse" } })).statusCode, 401);
   } finally { await h.app.close(); }
 });
+test("model catalog is session-scoped, selection is validated and capability-gated", async () => {
+  const h = harness();
+  try {
+    const cookie = (await h.pair()).headers["set-cookie"];
+    assert.equal((await h.request("/api/sessions/welcome/models")).statusCode, 401);
+    const catalog = JSON.parse((await h.request("/api/sessions/welcome/models", { cookie })).text);
+    assert.equal(catalog.sessionId, "welcome");
+    assert.ok(catalog.current.provider && catalog.current.model);
+    assert.ok(catalog.routable);
+    assert.ok(catalog.groups.every((g: any) => g.id && g.name && g.models.length > 0));
+    assert.equal((await h.request("/api/model", { cookie, body: { sessionId: "welcome", provider: "missing", model: "missing" } })).statusCode, 400);
+    assert.equal((await h.request("/api/model", { cookie, body: { sessionId: "nope", provider: catalog.current.provider, model: catalog.current.model } })).statusCode, 404);
+    assert.equal((await h.request("/api/model", { cookie, origin: "https://evil.example", body: { sessionId: "welcome", provider: catalog.groups[0].id, model: catalog.groups[0].models[0].id } })).statusCode, 403);
+    assert.equal((await h.request("/api/model", { cookie, body: { sessionId: "welcome", provider: catalog.groups[0].id, model: catalog.groups[0].models[0].id } })).statusCode, 200);
+    const after = JSON.parse((await h.request("/api/sessions/welcome/models", { cookie })).text);
+    assert.equal(after.current.model, catalog.groups[0].models[0].id);
+    const gated = h.adapter.capabilities.bind(h.adapter);
+    h.adapter.capabilities = () => gated().filter((c: any) => c !== "models");
+    assert.equal((await h.request("/api/sessions/welcome/models", { cookie })).statusCode, 409);
+    assert.equal((await h.request("/api/model", { cookie, body: { sessionId: "welcome", provider: catalog.groups[0].id, model: catalog.groups[0].models[0].id } })).statusCode, 409);
+  } finally { await h.app.close(); }
+});
 test("prompt retries are idempotent; changed body cannot reuse an ID", async () => {
   const h = harness();
   try {

@@ -1,4 +1,4 @@
-import type { ApprovalResponse, Capability, HistoryPage, ImageDTO, MobileEvent, QuestionResponse, SendPromptInput, Snapshot } from "@dsh-mobile/protocol";
+import type { ApprovalResponse, Capability, HistoryPage, ImageDTO, ModelsDTO, MobileEvent, QuestionResponse, SelectModelInput, SendPromptInput, Snapshot } from "@dsh-mobile/protocol";
 export interface HarnessAdapter {
   capabilities(): Capability[];
   snapshot(): Promise<Omit<Snapshot, "kind" | "revision">>;
@@ -9,6 +9,8 @@ export interface HarnessAdapter {
   respondApproval(input: ApprovalResponse): Promise<void>;
   respondQuestion(input: QuestionResponse): Promise<void>;
   attachment(sessionId: string, id: string): Promise<{ metadata: ImageDTO; data: Uint8Array }>;
+  models(sessionId: string): Promise<ModelsDTO>;
+  selectModel(input: SelectModelInput): Promise<void>;
   subscribe(callback: (event: MobileEvent) => void): () => void;
   refreshAccess?(): void;
   dispose(): void;

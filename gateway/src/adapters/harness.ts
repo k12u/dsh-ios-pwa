@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import { eventSchema, questionSchema, type ApprovalDTO, type ApprovalResponse, type Capability, type MobileEvent, type QuestionDTO, type QuestionResponse, type SendPromptInput, type TaskDTO } from "@dsh-mobile/protocol";
+import { eventSchema, modelsSchema, questionSchema, type ApprovalDTO, type ApprovalResponse, type Capability, type MobileEvent, type QuestionDTO, type QuestionResponse, type SelectModelInput, type SendPromptInput, type TaskDTO } from "@dsh-mobile/protocol";
 import { createDshHostAdapter } from "./upstream/dsh-host-adapter.mjs";
 import { normalizeEvent, normalizeTasks } from "./harness-events";
 import { GatewayError, type HarnessAdapter } from "../normalization/adapter";
@@ -23,7 +23,7 @@ export class DshAdapter implements HarnessAdapter {
   private disposers: (() => void)[] = [];
   private abort = new AbortController();
   private counter = 0;
-  private enabled = new Set<Capability>(["sessions", "streaming", "approvals", "questions", "cancel", "steer", "images", "workspaces", "tasks"]);
+  private enabled = new Set<Capability>(["sessions", "streaming", "approvals", "questions", "cancel", "steer", "images", "workspaces", "tasks", "models"]);
   constructor(private ctx: HarnessContext, private shouldHandle = () => true) {
     this.api = createDshHostAdapter(ctx.typertGateway);
     this.disposers.push(ctx.on("session/event", (session, event) => {
@@ -61,7 +61,7 @@ export class DshAdapter implements HarnessAdapter {
     const catalog = this.ctx.typert?.local;
     if (typeof catalog?.get !== "function") return [...this.enabled];
     // Strict descriptor presence takes priority over version strings.
-    const requires: Partial<Record<Capability, string[]>> = { sessions: ["session/list", "session/create", "session/prompt"], streaming: ["session/follow"], workspaces: ["workspace/follow"], images: ["session/attachment", "session/prompt"], cancel: ["session/cancel"], steer: ["session/prompt"], tasks: ["session/control"] };
+    const requires: Partial<Record<Capability, string[]>> = { sessions: ["session/list", "session/create", "session/prompt"], streaming: ["session/follow"], workspaces: ["workspace/follow"], images: ["session/attachment", "session/prompt"], cancel: ["session/cancel"], steer: ["session/prompt"], tasks: ["session/control"], models: ["session/modelCatalog", "session/selectModel"] };
     return [...this.enabled].filter(cap => !requires[cap] || requires[cap]!.every(endpoint => catalog.get(endpoint) !== undefined));
   }
   private emit(event: MobileEvent) { for (const listener of this.listeners) listener(event); }
@@ -135,6 +135,35 @@ export class DshAdapter implements HarnessAdapter {
   async attachment(sessionId: string, id: string) {
     const result = await this.api.sessions.attachment({ sessionId, attachmentId: id }, AbortSignal.timeout(20_000));
     return { metadata: { id, name: result.attachment.name ?? "Image", mediaType: result.attachment.mediaType, bytes: result.attachment.bytes }, data: Buffer.from(result.data, "base64") };
+  }
+  async models(sessionId: string) {
+    let catalog: any;
+    try { catalog = await this.api.sessions.models({ sessionId }, AbortSignal.timeout(20_000)); }
+    catch (e: any) { if (/not.found|unknown|unsupported/i.test(String(e?.code))) this.enabled.delete("models"); throw e; }
+    const current = catalog?.current && typeof catalog.current.provider === "string" && typeof catalog.current.model === "string"
+      ? { provider: catalog.current.provider, model: catalog.current.model } : null;
+    const rawGroups: any[] = Array.isArray(catalog?.groups) ? catalog.groups : [];
+    const groups = rawGroups.map((group: any) => {
+      const rawModels: any[] = Array.isArray(group?.models) ? group.models : [];
+      const options = rawModels.map((m: any) => ({ id: String(m?.id ?? ""), name: String(m?.name ?? m?.id ?? "") })).filter((m: { id: string }) => m.id);
+      return { id: String(group?.id ?? ""), name: String(group?.name ?? group?.id ?? ""), models: options };
+    }).filter((group: { id: string; models: unknown[] }) => group.id && group.models.length > 0);
+    return modelsSchema.parse({ sessionId, current, routable: catalog?.routable === true, groups });
+  }
+  async selectModel(input: SelectModelInput) {
+    const payload: Record<string, unknown> = { sessionId: input.sessionId, provider: input.provider, model: input.model };
+    try {
+      try {
+        // Preserve or default the reasoning effort the way the host's own picker does.
+        const catalog = await this.api.sessions.models({ sessionId: input.sessionId }, AbortSignal.timeout(20_000));
+        const group = (catalog?.groups ?? []).find((g: any) => g?.id === input.provider);
+        const model = (group?.models ?? []).find((m: any) => m?.id === input.model);
+        const effort = catalog?.current?.provider === input.provider && catalog?.current?.model === input.model
+          ? catalog?.current?.reasoningEffort : model?.reasoning?.defaultEffort;
+        if (typeof effort === "string" && effort) payload.reasoningEffort = effort;
+      } catch { /* Selection works without an effort hint. */ }
+      await this.api.sessions.selectModel(payload, AbortSignal.timeout(20_000));
+    } catch (e: any) { if (/not.found|unknown|unsupported/i.test(String(e?.code))) this.enabled.delete("models"); throw e; }
   }
   async respondApproval(input: ApprovalResponse) {
     const p = this.approvals.get(input.id);

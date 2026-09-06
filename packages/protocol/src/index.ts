@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const PROTOCOL = 1;
 export const GATEWAY_VERSION = "0.1.0";
-export const capabilities = ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer", "push", "files", "commands", "skills"] as const;
+export const capabilities = ["sessions", "workspaces", "streaming", "tasks", "approvals", "questions", "images", "cancel", "steer", "push", "files", "commands", "skills", "models"] as const;
 export type Capability = typeof capabilities[number];
 const id = z.string().min(1).max(256);
 const text = z.string().max(200_000);
@@ -61,6 +61,14 @@ export const questionResponseSchema = z.object({ id, sessionId: id, answers: z.a
 export type ApprovalResponse = z.infer<typeof approvalResponseSchema>;
 export type QuestionResponse = z.infer<typeof questionResponseSchema>;
 export const createSessionSchema = z.object({ workspaceId: id.optional() });
+export const modelSelectionSchema = z.object({ provider: z.string().min(1).max(256), model: z.string().min(1).max(256) });
+export const modelOptionSchema = z.object({ id, name: z.string().min(1).max(256) });
+export const modelGroupSchema = z.object({ id, name: z.string().min(1).max(256), models: z.array(modelOptionSchema).min(1).max(200) });
+export const modelsSchema = z.object({ sessionId: id, current: modelSelectionSchema.nullable(), routable: z.boolean(), groups: z.array(modelGroupSchema).max(50) });
+export const selectModelSchema = z.object({ sessionId: id, provider: z.string().min(1).max(256), model: z.string().min(1).max(256) });
+export type ModelSelectionDTO = z.infer<typeof modelSelectionSchema>;
+export type ModelsDTO = z.infer<typeof modelsSchema>;
+export type SelectModelInput = z.infer<typeof selectModelSchema>;
 export const pairingSchema = z.object({ token: z.string().min(32).max(128), name: z.string().trim().min(1).max(80).default("Mobile browser") });
 export const pushSubscriptionSchema = z.object({ endpoint: z.string().url().max(2048), keys: z.object({ p256dh: z.string().regex(/^[A-Za-z0-9_-]+$/).length(87), auth: z.string().regex(/^[A-Za-z0-9_-]+$/).length(22) }) });
 export type PushSubscriptionDTO = z.infer<typeof pushSubscriptionSchema>;
