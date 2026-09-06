@@ -86,6 +86,24 @@ test("model catalog is session-scoped, selection is validated and capability-gat
     assert.equal((await h.request("/api/model", { cookie, body: { sessionId: "welcome", provider: catalog.groups[0].id, model: catalog.groups[0].models[0].id } })).statusCode, 409);
   } finally { await h.app.close(); }
 });
+test("agent presets are listed, switchable and capability-gated", async () => {
+  const h = harness();
+  try {
+    const cookie = (await h.pair()).headers["set-cookie"];
+    assert.equal((await h.request("/api/presets")).statusCode, 401);
+    const roster = JSON.parse((await h.request("/api/presets", { cookie })).text);
+    assert.equal(roster.presets.find((p: any) => p.default).id, "standard");
+    assert.ok(roster.presets.some((p: any) => p.id === "creator") && roster.presets.some((p: any) => p.id === "minimal"));
+    assert.equal((await h.request("/api/preset", { cookie, body: { presetId: "nope" } })).statusCode, 400);
+    assert.equal((await h.request("/api/preset", { cookie, origin: "https://evil.example", body: { presetId: "minimal" } })).statusCode, 403);
+    assert.equal((await h.request("/api/preset", { cookie, body: { presetId: "minimal" } })).statusCode, 200);
+    assert.equal(JSON.parse((await h.request("/api/presets", { cookie })).text).presets.find((p: any) => p.default).id, "minimal");
+    const gated = h.adapter.capabilities.bind(h.adapter);
+    h.adapter.capabilities = () => gated().filter((c: any) => c !== "presets");
+    assert.equal((await h.request("/api/presets", { cookie })).statusCode, 409);
+    assert.equal((await h.request("/api/preset", { cookie, body: { presetId: "minimal" } })).statusCode, 409);
+  } finally { await h.app.close(); }
+});
 test("prompt retries are idempotent; changed body cannot reuse an ID", async () => {
   const h = harness();
   try {
