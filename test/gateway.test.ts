@@ -14,9 +14,9 @@ class Response extends Writable {
   _write(chunk: Buffer, _encoding: string, next: () => void) { this.chunks.push(Buffer.from(chunk)); next(); }
   get text() { return Buffer.concat(this.chunks).toString(); }
 }
-function harness() {
+function harness(staticDir = resolve("web/dist")) {
   const registry = new Registry(), adapter = new DemoAdapter();
-  const app = createGateway(adapter, { registry, origin: "https://mobile.example", staticDir: resolve("web/dist") });
+  const app = createGateway(adapter, { registry, origin: "https://mobile.example", staticDir });
   async function request(path: string, options: { method?: string; body?: unknown; cookie?: string; origin?: string } = {}) {
     const req = Readable.from(options.body === undefined ? [] : [Buffer.from(JSON.stringify(options.body))]);
     Object.assign(req, { method: options.method ?? (options.body === undefined ? "GET" : "POST"), url: path, headers: { "content-type": "application/json", origin: options.origin ?? "https://mobile.example", cookie: options.cookie }, socket: { remoteAddress: "127.0.0.1" } });
@@ -215,4 +215,39 @@ test("real WebSocket framing buffers concurrent events until the authoritative s
     assert.ok(frames.findIndex(f => f.kind === "attention.resolved") > index);
     assert.equal(frames[index].approvals.find((a: any) => a.id === "approval-1").state, "rejected");
   } finally { socket.destroy(); receiver.destroy(); await h.app.close(); }
+});
+test("raw adapter failures keep the 503 contract while method, path and stack reach stderr without the query string", async () => {
+  const h = harness(resolve("web/dist/absent"));
+  class QuietSocket extends Duplex { _read() {} _write(_chunk: Buffer, _encoding: string, callback: () => void) { callback(); } }
+  const logs: any[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { logs.push(args); };
+  try {
+    const cookie = (await h.pair()).headers["set-cookie"];
+    h.adapter.snapshot = async () => { throw new Error("Harness RPC died"); };
+    const snapshot = await h.request("/api/snapshot?t=secret-token", { cookie });
+    assert.equal(snapshot.statusCode, 503);
+    assert.deepEqual(JSON.parse(snapshot.text), { code: "unavailable", message: "The host could not complete this request." });
+    assert.equal((await h.request("/pair?t=secret-token")).statusCode, 503);
+    const socket = new QuietSocket();
+    h.app.server.emit("upgrade", { method: "GET", url: "/ws/mobile", headers: {
+      origin: "https://mobile.example", cookie, upgrade: "websocket",
+      "sec-websocket-key": randomBytes(16).toString("base64"), "sec-websocket-version": "13",
+    } }, socket, Buffer.alloc(0));
+    await new Promise(r => setTimeout(r, 10));
+    socket.destroy();
+  } finally { console.error = original; await h.app.close(); }
+  const requestLogs = logs.filter(args => args[0] === "[mobile-pwa] Request failed:");
+  assert.deepEqual(requestLogs.map(args => [args[1], args[2]]), [["GET", "/api/snapshot"], ["GET", "/pair"]]);
+  const upgradeLog = logs.find(args => args[0] === "[mobile-pwa] Upgrade failed:");
+  assert.ok(upgradeLog);
+  assert.deepEqual([upgradeLog[1], upgradeLog[2]], ["GET", "/ws/mobile"]);
+  for (const entry of [...requestLogs, upgradeLog]) {
+    assert.ok(entry[3] instanceof Error);
+    assert.match(String(entry[3].stack), /\n\s+at /);
+  }
+  assert.match(requestLogs[0][3].stack, /^Error: Harness RPC died/);
+  assert.match(requestLogs[1][3].stack, /^Error: ENOENT/);
+  assert.match(upgradeLog[3].stack, /^Error: Harness RPC died/);
+  assert.ok(!logs.flat().some(value => typeof value === "string" && value.includes("secret-token")));
 });
