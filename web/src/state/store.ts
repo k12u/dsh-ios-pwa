@@ -73,7 +73,7 @@ export const store = {
   subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
 };
 export function useStore() { return useSyncExternalStore(store.subscribe, store.get, store.get); }
-export function projectConversation(events: MobileEvent[]): { messages: Message[]; tools: ToolExecution[] } {
+export function projectConversation(events: MobileEvent[]): { messages: Message[]; tools: ToolExecution[]; timeline: TimelineItem[] } {
   const messages = new Map<string, Message>(), tools = new Map<string, ToolExecution>();
   for (const e of events) {
     if (e.kind.startsWith("message.") && "messageId" in e) {
@@ -93,5 +93,17 @@ export function projectConversation(events: MobileEvent[]): { messages: Message[
       for (const tool of tools.values()) if (tool.status === "running") tool.status = "unknown";
     }
   }
-  return { messages: [...messages.values()].filter(m => m.text || m.images.length || !m.complete), tools: [...tools.values()] };
+  const keptMessages = [...messages.values()].filter(m => m.text || m.images.length || !m.complete);
+  const keptTools = [...tools.values()];
+  // Interleave messages and tools by their first seq, so the conversation can
+  // be rendered in true chronological order instead of tools lumped at the end.
+  const timeline: TimelineItem[] = [
+    ...keptMessages.map(message => ({ kind: "message" as const, message })),
+    ...keptTools.map(tool => ({ kind: "tool" as const, tool })),
+  ].sort((a, b) => {
+    const first = a.kind === "message" ? a.message : a.tool, second = b.kind === "message" ? b.message : b.tool;
+    return first.seq - second.seq || first.time - second.time || first.id.localeCompare(second.id);
+  });
+  return { messages: keptMessages, tools: keptTools, timeline };
 }
+export type TimelineItem = { kind: "message"; message: Message } | { kind: "tool"; tool: ToolExecution };

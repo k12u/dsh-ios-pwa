@@ -53,3 +53,7 @@
 .status-line .dot{margin-left:0}
 .bottom-nav{flex-direction:column;justify-content:flex-start;padding:0}
 .bottom-nav .nav-row{display:flex;justify-content:space-around;padding:10px 20px calc(9px + env(safe-area-inset-bottom))}
+
+.tool-group{background:#f0f2f6;border-radius:9px;padding:13px 15px;font-size:12px;color:#7f8999;margin:15px 0 25px}
+.tool-group p{margin:2px 0}
+.tool-group .streaming-dot{color:var(--accent)}
