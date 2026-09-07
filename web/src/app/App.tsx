@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { GATEWAY_VERSION, type ModelsDTO, type PresetsDTO, type SendPromptInput } from "@dsh-mobile/protocol";
-import type { Message } from "@dsh-mobile/domain";
+import type { Message, ToolExecution } from "@dsh-mobile/domain";
 import { useStore, projectConversation, store, type AppState } from "../state/store";
 import { projectInbox } from "../projections/inbox";
 import { api, loadHistory } from "../api/gateway-client";
@@ -113,7 +113,7 @@ function Pairing({ onPaired }: { onPaired: () => void }) {
   return <main className="pairing-page"><div className="brand"><span className="brand-mark">d</span>DSH Mobile</div><div className="pairing-illustration"><Icon name="sessions"/><span className="pairing-line"/><span className="brand-mark">d</span></div><div className="eyebrow">A DIRECT LINE TO YOUR AGENT</div><h1>Your workspace.<br/>In your pocket.</h1><p>Open a pairing link from your Harness host, or paste its one-time code below.</p><form onSubmit={e => { e.preventDefault(); setBusy(true); setError(""); void api("/api/pair", { token, name }).then(() => { setToken(""); onPaired(); }).catch(e => setError(e.message)).finally(() => setBusy(false)); }}><label>Device name<input value={name} maxLength={80} required onChange={e => setName(e.target.value)}/></label><label>One-time pairing code<input value={token} autoComplete="off" spellCheck={false} required onChange={e => setToken(e.target.value.trim())}/></label><button className="primary" disabled={busy || !token || !name.trim()}>{busy ? "Connecting…" : "Connect to workspace"}<Icon name="arrow"/></button>{error && <p role="alert" className="error-text">{error}</p>}</form><small className="muted">Pairing links expire after 5 minutes.<br/>Once connected, add this app to your Home Screen.</small></main>;
 }
 function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; view: string; online: boolean; onBusy: (busy: boolean) => void }) {
-  const state = useStore(); const { messages, tools } = projectConversation(state.events[sessionId] ?? []);
+  const state = useStore(); const { messages, tools, timeline } = projectConversation(state.events[sessionId] ?? []);
   const [text, setText] = useState(""), [mode, setMode] = useState<"queue" | "steer">("queue"), [images, setImages] = useState<SendPromptInput["images"]>([]);
   const [sending, setSending] = useState(false), [error, setError] = useState(""), [loading, setLoading] = useState(false);
   const [models, setModels] = useState<ModelsDTO>(), [model, setModel] = useState<{ provider: string; model: string } | undefined>(undefined), [selecting, setSelecting] = useState(false);
@@ -139,7 +139,7 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
     } catch (e) { setError((e as Error).message); setModel(previous); }
     finally { setSelecting(false); }
   }
-  useEffect(() => { if (nearBottom.current) tail.current?.scrollIntoView({ block: "end" }); }, [messages.at(-1)?.text, view]);
+  useEffect(() => { if (nearBottom.current) tail.current?.scrollIntoView({ block: "end" }); }, [messages.at(-1)?.text, tools.at(-1)?.status, tools.length, view]);
   useEffect(() => { const listener = () => { nearBottom.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 220; }; window.addEventListener("scroll", listener, { passive: true }); return () => window.removeEventListener("scroll", listener); }, []);
   async function send(e: FormEvent) {
     e.preventDefault(); if (!online || sending) return;
@@ -163,9 +163,21 @@ function Conversation({ sessionId, view, online, onBusy }: { sessionId: string; 
   }
   const imageUrl = (id: string) => "/api/sessions/" + encodeURIComponent(sessionId) + "/images/" + encodeURIComponent(id);
   const modelValue = model && models?.groups.some(g => g.id === model.provider && g.models.some(m => m.id === model.model)) ? model.provider + "/" + model.model : "";
+  // Consecutive tool executions collapse into one foldable block; a block
+  // containing a running tool stays expanded so live activity is visible.
+  const symbol = (status: string) => status === "completed" ? "✓" : status === "failed" ? "!" : "●";
+  const segments: ({ kind: "message"; message: Message } | { kind: "tools"; tools: ToolExecution[] })[] = [];
+  for (const item of timeline) {
+    if (item.kind === "message") segments.push({ kind: "message", message: item.message });
+    else {
+      const last = segments.at(-1);
+      if (last?.kind === "tools") last.tools.push(item.tool);
+      else segments.push({ kind: "tools", tools: [item.tool] });
+    }
+  }
   return <div className="conversation-layout">
     <div className="conversation-body">
-      {view === "conversation" && <>{state.cursors[sessionId] && <button className="load-earlier" disabled={!online || loading} onClick={() => { setLoading(true); void loadHistory(sessionId, state.cursors[sessionId]).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>{loading ? "Loading…" : "Load earlier messages"}</button>}{messages.map(m => <article className={"message " + m.role} key={m.id}><div className="message-author">{m.role === "assistant" ? <><span className="agent-mark">d</span>Agent</> : "You"}{!m.complete && <span className="streaming-dot"/>}</div><Markdown text={m.text}/>{m.images.map(i => <a href={imageUrl(i.id)} target="_blank" rel="noreferrer" key={i.id}><img className="message-image" src={imageUrl(i.id)} alt={i.name} loading="lazy"/></a>)}</article>)}{tools.length > 0 && <details className="tool-summary"><summary>{tools.length} tool operation{tools.length > 1 ? "s" : ""}</summary>{tools.map(t => <p key={t.id}>{t.status === "completed" ? "✓" : t.status === "failed" ? "!" : "●"} {t.name}</p>)}</details>}{supported("approvals") && Object.values(state.approvals).filter(a => a.sessionId === sessionId).map(a => <ApprovalCard key={a.id + ":" + state.revision} approval={a} online={online}/>)}{supported("questions") && Object.values(state.questions).filter(q => q.sessionId === sessionId).map(q => <QuestionCard key={q.id + ":" + state.revision} question={q} online={online}/>)}{!messages.length && <Empty title="Start a conversation" detail="Tell your agent what you'd like to work on."/>}</>}
+      {view === "conversation" && <>{state.cursors[sessionId] && <button className="load-earlier" disabled={!online || loading} onClick={() => { setLoading(true); void loadHistory(sessionId, state.cursors[sessionId]).catch(e => setError(e.message)).finally(() => setLoading(false)); }}>{loading ? "Loading…" : "Load earlier messages"}</button>}{segments.map(segment => segment.kind === "message" ? <article className={"message " + segment.message.role} key={segment.message.id}><div className="message-author">{segment.message.role === "assistant" ? <><span className="agent-mark">d</span>Agent</> : "You"}{!segment.message.complete && <span className="streaming-dot"/>}</div><Markdown text={segment.message.text}/>{segment.message.images.map(i => <a href={imageUrl(i.id)} target="_blank" rel="noreferrer" key={i.id}><img className="message-image" src={imageUrl(i.id)} alt={i.name} loading="lazy"/></a>)}</article> : segment.tools.some(t => t.status === "running") ? <div className="tool-group open" key={"runs:" + segment.tools[0].id}>{segment.tools.map(t => <p key={t.id}><span className={t.status === "running" ? "streaming-dot" : ""}>{symbol(t.status)}</span> {t.name}</p>)}</div> : <details className="tool-summary" key={"tools:" + segment.tools[0].id}><summary>{segment.tools.length} tool operation{segment.tools.length > 1 ? "s" : ""}</summary>{segment.tools.map(t => <p key={t.id}>{symbol(t.status)} {t.name}</p>)}</details>)}{supported("approvals") && Object.values(state.approvals).filter(a => a.sessionId === sessionId).map(a => <ApprovalCard key={a.id + ":" + state.revision} approval={a} online={online}/>)}{supported("questions") && Object.values(state.questions).filter(q => q.sessionId === sessionId).map(q => <QuestionCard key={q.id + ":" + state.revision} question={q} online={online}/>)}{!messages.length && <Empty title="Start a conversation" detail="Tell your agent what you'd like to work on."/>}</>}
       {view === "activity" && <>{tools.length ? tools.map(t => <details className="activity-item" key={t.id}><summary><span className={"badge " + t.status}>{labels[t.status] ?? t.status}</span> {t.name}</summary><pre>{t.preview ?? "No additional details"}</pre><small>{new Date(t.time).toLocaleTimeString()}</small></details>) : <Empty title="No activity yet" detail="Tool execution details will appear here."/>}</>}
       {view === "files" && <><h2>Shared images</h2><div className="image-grid">{messages.flatMap(m => m.images).map(i => <a key={i.id} href={imageUrl(i.id)} target="_blank" rel="noreferrer"><img src={imageUrl(i.id)} alt={i.name} loading="lazy"/><span>{i.name}</span></a>)}</div><p className="muted">Images shared in this conversation. Workspace file browsing is not enabled.</p></>}
       <div ref={tail}/>
