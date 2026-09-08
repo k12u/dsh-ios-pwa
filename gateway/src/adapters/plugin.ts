@@ -16,7 +16,9 @@ export default {
     const dataDir = config.dataDir ?? process.env.DSH_MOBILE_DATA_DIR ?? resolve(os.homedir(), ".local/state/dsh-mobile");
     const registry = new Registry(resolve(dataDir, "devices.json"));
     const push = config.pushSubject ? new PushService(registry, resolve(dataDir, "vapid.json"), config.pushSubject) : undefined;
-    const adapter = new DshAdapter(ctx, () => registry.list().length > 0);
+    // Fail open to the host's own handler until createGateway installs the
+    // live-audience gate. A merely paired (offline) device must not hijack HITL.
+    const adapter = new DshAdapter(ctx, () => false);
     const app = createGateway(adapter, { origin, registry, push, staticDir: fileURLToPath(new URL("../public", import.meta.url)) });
     const adminLimit = new RateLimiter(10);
     const escape = (text: string) => text.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);

@@ -14,7 +14,8 @@ export interface HarnessAdapter {
   presets(): Promise<PresetsDTO>;
   selectPreset(input: SetPresetInput): Promise<void>;
   subscribe(callback: (event: MobileEvent) => void): () => void;
-  refreshAccess?(): void;
+  setInteractionAudience?(fn: (sessionId: string) => boolean): void;
+  refreshAccess?(sessionId?: string): void;
   dispose(): void;
 }
 export class GatewayError extends Error {

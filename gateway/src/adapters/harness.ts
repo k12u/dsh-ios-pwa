@@ -24,14 +24,18 @@ export class DshAdapter implements HarnessAdapter {
   private abort = new AbortController();
   private counter = 0;
   private enabled = new Set<Capability>(["sessions", "streaming", "approvals", "questions", "cancel", "steer", "images", "workspaces", "tasks", "models", "presets"]);
-  constructor(private ctx: HarnessContext, private shouldHandle = () => true) {
+  constructor(private ctx: HarnessContext, private shouldHandle: (sessionId: string) => boolean = () => true) {
     this.api = createDshHostAdapter(ctx.typertGateway);
     this.disposers.push(ctx.on("session/event", (session, event) => {
       for (const e of normalizeEvent(String(session.id), event)) this.emit(e);
     }));
     this.disposers.push(ctx.on("approval/request", (request, next) => {
-      if (!this.shouldHandle() || !request.agent?.id || typeof request.toolName !== "string") return next();
+      if (!request.agent?.id || typeof request.toolName !== "string") return next();
       if (request.signal?.aborted) return next();
+      // Never claim exclusive control without a live mobile audience for this
+      // session. Falling through to next() leaves the host's own handler
+      // (CLI/Web UI) visible instead of stranding the request on an offline phone.
+      if (!this.shouldHandle(String(request.agent.id))) return next();
       const value: ApprovalDTO = { id: randomUUID(), sessionId: String(request.agent.id), toolName: request.toolName, reason: request.reason ?? "This operation needs your permission.", state: "pending" };
       return new Promise((resolve, reject) => {
         const abort = () => this.resolveApproval(value.id, "cancelled");
@@ -41,7 +45,8 @@ export class DshAdapter implements HarnessAdapter {
       });
     }, { prepend: true }));
     this.disposers.push(ctx.on("user-questions/request", (request, next) => {
-      if (!this.shouldHandle() || !request.agent?.id || !Array.isArray(request.questions) || request.signal?.aborted) return next();
+      if (!request.agent?.id || !Array.isArray(request.questions) || request.signal?.aborted) return next();
+      if (!this.shouldHandle(String(request.agent.id))) return next();
       const parsed = questionSchema.safeParse({ id: randomUUID(), sessionId: String(request.agent.id), state: "pending", fields: request.questions.map((q: any) => ({
         id: q.id, title: q.question, detail: q.detail, multiple: q.multiSelect === true,
         options: (q.options ?? []).map((o: any) => ({ id: o.label, label: o.label, description: o.description })),
@@ -211,14 +216,21 @@ export class DshAdapter implements HarnessAdapter {
     this.control(p.value.sessionId, { kind: "attention.resolved", target: "question", attentionId: id, state: answer ? "answered" : "cancelled" });
   }
   subscribe(callback: (e: MobileEvent) => void) { this.listeners.add(callback); return () => { this.listeners.delete(callback); }; }
-  refreshAccess() {
-    if (this.shouldHandle()) return;
+  setInteractionAudience(fn: (sessionId: string) => boolean) {
+    this.shouldHandle = fn;
+    this.refreshAccess();
+  }
+  refreshAccess(sessionId?: string) {
     for (const [id, pending] of this.approvals) {
+      if (sessionId !== undefined && pending.value.sessionId !== sessionId) continue;
+      if (this.shouldHandle(pending.value.sessionId)) continue;
       this.approvals.delete(id); pending.cleanup();
       this.control(pending.value.sessionId, { kind: "attention.resolved", target: "approval", attentionId: id, state: "cancelled" });
       Promise.resolve().then(pending.next).then(pending.resolve, pending.reject);
     }
     for (const [id, pending] of this.questions) {
+      if (sessionId !== undefined && pending.value.sessionId !== sessionId) continue;
+      if (this.shouldHandle(pending.value.sessionId)) continue;
       this.questions.delete(id); pending.cleanup();
       this.control(pending.value.sessionId, { kind: "attention.resolved", target: "question", attentionId: id, state: "cancelled" });
       Promise.resolve().then(pending.next).then(pending.resolve, pending.reject);

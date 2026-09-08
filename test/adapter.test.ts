@@ -135,3 +135,28 @@ test("revoking the last device returns pending control to the host rather than l
     assert.equal((await adapter.snapshot()).approvals.length, 0);
   } finally { adapter.dispose(); }
 });
+test("the audience gate is evaluated per session so other clients keep their own approvals and questions", () => {
+  const h = fakeContext(), adapter = new DshAdapter(h.context, (sessionId: string) => sessionId === "s1");
+  try {
+    assert.equal(h.listeners.get("approval/request")!({ agent: { id: "s2" }, toolName: "bash", reason: "escalate sandbox to danger-full-access" }, () => "host"), "host");
+    assert.notEqual(h.listeners.get("approval/request")!({ agent: { id: "s1" }, toolName: "bash", reason: "escalate sandbox to danger-full-access" }, () => "host"), "host");
+    assert.equal(h.listeners.get("user-questions/request")!({ agent: { id: "s2" }, questions: [{ id: "q", question: "Which?", options: [{ label: "A" }] }] }, () => "host"), "host");
+    assert.notEqual(h.listeners.get("user-questions/request")!({ agent: { id: "s1" }, questions: [{ id: "q", question: "Which?", options: [{ label: "A" }] }] }, () => "host"), "host");
+  } finally { adapter.dispose(); }
+});
+test("losing the audience releases only the affected session back to the host", async () => {
+  let live = true;
+  const h = fakeContext(), adapter = new DshAdapter(h.context, (sessionId: string) => live || sessionId === "s1"), events: any[] = [];
+  adapter.subscribe(e => events.push(e));
+  try {
+    const keep = h.listeners.get("approval/request")!({ agent: { id: "s1" }, toolName: "bash" }, () => "host-s1");
+    const release = h.listeners.get("approval/request")!({ agent: { id: "s2" }, toolName: "bash" }, () => "host-s2");
+    live = false; adapter.setInteractionAudience((sessionId: string) => sessionId === "s1");
+    assert.equal(await release, "host-s2");
+    assert.equal((await adapter.snapshot()).approvals.length, 1);
+    adapter.refreshAccess("s1");
+    assert.equal((await adapter.snapshot()).approvals.length, 1);
+    await adapter.respondApproval({ id: (await adapter.snapshot()).approvals[0].id, sessionId: "s1", outcome: "allowed-once" });
+    assert.equal(await keep, "allowed-once");
+  } finally { adapter.dispose(); }
+});
