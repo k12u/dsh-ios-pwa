@@ -18,6 +18,16 @@ export function createGateway(adapter: HarnessAdapter, options: ServerOptions) {
   const cookie = (value: string, maxAge = 2592000) => cookieName + "=" + value + "; HttpOnly; SameSite=Strict; Path=/; Max-Age=" + maxAge + (secure ? "; Secure" : "");
   const pairLimit = new RateLimiter(10), requestLimit = new RateLimiter(180);
   const clients = new Map<any, { deviceId: string; buffered?: MobileEvent[] }>();
+  // Exclusive HITL handlers in the adapter must only claim a request while a
+  // live mobile viewer exists. Paired-but-offline devices fall through to the
+  // host's own handler so approvals/questions stay visible elsewhere.
+  const hasLiveAudience = () => {
+    for (const [ws, client] of clients) {
+      if (ws?.readyState === WebSocket.OPEN && options.registry.active(client.deviceId)) return true;
+    }
+    return false;
+  };
+  adapter.setInteractionAudience?.(() => hasLiveAudience());
   const requests = new Map<string, { digest: string; promise: Promise<void>; until: number }>();
   let revision = 0;
   const caps = () => [...adapter.capabilities(), ...(options.push ? ["push"] : [])];
@@ -143,7 +153,7 @@ export function createGateway(adapter: HarnessAdapter, options: ServerOptions) {
       if (clients.size >= 100) throw new GatewayError(503, "busy", "Connection limit");
       wss.handleUpgrade(req, socket, head, (ws: any) => {
         const client = { deviceId: device.id, buffered: [] as MobileEvent[] | undefined }; clients.set(ws, client);
-        ws.on("error", () => ws.terminate()); ws.on("close", () => clients.delete(ws));
+        ws.on("error", () => ws.terminate()); ws.on("close", () => { clients.delete(ws); adapter.refreshAccess?.(); });
         ws.on("message", () => ws.close(1008, "Use authenticated HTTP for requests"));
         ws.send(JSON.stringify({ kind: "hello", protocol: PROTOCOL, minSupportedProtocol: PROTOCOL, gatewayVersion: GATEWAY_VERSION, capabilities: caps() }));
         void snapshot().then(value => {
